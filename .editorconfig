@@ -1,0 +1,20 @@
+# Configurazione condivisa fra editor e IDE.
+# Fa rispettare a tutti gli editor le stesse regole base
+# (indentazione, fine riga, charset). Evita le tipiche guerre
+# di stile fra Windows e mac/Linux.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[Makefile]
+indent_style = tab

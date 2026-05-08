@@ -1,0 +1,8 @@
+# pnpm-workspace.yaml
+# Definisce quali sotto-cartelle sono "pacchetti" del monorepo.
+# Ogni cartella elencata qui può avere il suo package.json indipendente,
+# pur condividendo il node_modules a livello root.
+
+packages:
+  - 'apps/*'
+  - 'packages/*'
