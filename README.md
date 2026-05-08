@@ -12,6 +12,7 @@ Agenzia di comunicazione virtuale AI-driven.
 - [`SETUP-03-admin-auth.md`](./SETUP-03-admin-auth.md) — Step 3: autenticazione admin (NextAuth v5).
 - [`SETUP-04-storage-and-client-auth.md`](./SETUP-04-storage-and-client-auth.md) — Step 4: storage astratto + autenticazione client portal.
 - [`SETUP-05-brief-intake.md`](./SETUP-05-brief-intake.md) — Step 5: primo flusso end-to-end (brief intake + approvazione admin).
+- [`SETUP-06-direttore-operativo.md`](./SETUP-06-direttore-operativo.md) — Step 6: framework agenti + Direttore Operativo (primo agente AI).
 
 ## Struttura del repository
 
@@ -24,7 +25,8 @@ kansei-studio-agency/
 │   ├── shared/        # Tipi, schemi, definizioni agenti condivise
 │   ├── database/      # Schema Prisma + client DB (MySQL)
 │   ├── auth/          # Helper auth condivisi (bcrypt, lookup utente)
-│   └── storage/       # StorageProvider (LocalFs + S3 stub)
+│   ├── storage/       # StorageProvider (LocalFs + S3 stub)
+│   └── agents/        # Framework agenti AI + Direttore Operativo
 ├── docker-compose.yml # MySQL + Adminer per dev locale
 ├── package.json       # Root workspace
 ├── pnpm-workspace.yaml
