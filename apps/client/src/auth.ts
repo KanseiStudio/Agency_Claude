@@ -1,10 +1,5 @@
-// Istanza NextAuth completa (Node runtime).
-// Usata dalla route handler /api/auth/[...nextauth] e dai server component
-// che chiamano `auth()` per leggere la sessione.
-//
-// NON usare questa import dal middleware: il middleware gira in Edge
-// runtime e Prisma (importato transitivamente via @kansei/auth) non è
-// edge-compatible. Per il middleware c'è auth.config.ts.
+// Istanza NextAuth completa per il portale cliente (Node runtime).
+// Usata da route handler e server component.
 
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
@@ -28,7 +23,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const user = await authenticateByCredentials(
           parsed.data.email,
           parsed.data.password,
-          'admin',
+          'client',
         );
         if (!user) return null;
 

@@ -47,6 +47,42 @@ async function main() {
   console.log(`  ✓ Admin user: ${admin.email} (password: ${devAdminPassword})`);
 
   // ---------------------------------------------------------------------
+  // Cliente demo + utente collegato (per testare il portale cliente).
+  // ---------------------------------------------------------------------
+  const devClientPassword = process.env.DEV_CLIENT_PASSWORD ?? 'cliente-dev-2026!';
+  const clientPasswordHash = await hashPassword(devClientPassword);
+
+  const demoClient = await prisma.client.upsert({
+    where: { pIva: 'IT00000000000' },
+    update: {},
+    create: {
+      ragioneSociale: 'Cliente Demo S.r.l.',
+      pIva: 'IT00000000000',
+      emailFatturazione: 'amministrazione@cliente-demo.example',
+      indirizzo: 'Via Esempio 1, 00100 Roma (RM)',
+      localePreferito: 'it',
+      note: 'Cliente di esempio creato dal seed per testare il portale.',
+    },
+  });
+
+  const clientUser = await prisma.user.upsert({
+    where: { email: 'cliente.demo@example.com' },
+    update: {
+      passwordHash: clientPasswordHash,
+      clientId: demoClient.id,
+    },
+    create: {
+      email: 'cliente.demo@example.com',
+      role: 'client',
+      locale: 'it',
+      passwordHash: clientPasswordHash,
+      clientId: demoClient.id,
+    },
+  });
+  console.log(`  ✓ Demo client user: ${clientUser.email} (password: ${devClientPassword})`);
+  console.log(`  ✓ Demo client company: ${demoClient.ragioneSociale}`);
+
+  // ---------------------------------------------------------------------
   // Pricing models (snapshot maggio 2026)
   // ---------------------------------------------------------------------
   const validFrom = new Date('2026-05-01T00:00:00Z');

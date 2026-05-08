@@ -1,6 +1,7 @@
 import { auth, signOut } from '@/auth';
 import type { Locale, ProjectStatus, ProjectType } from '@kansei/shared';
 import { prisma } from '@kansei/database';
+import { getStorage } from '@kansei/storage';
 
 // Server component async: legge sessione corrente + conteggi DB.
 export default async function Home() {
@@ -16,6 +17,12 @@ export default async function Home() {
     prisma.serviceCatalog.count(),
     prisma.approvalPolicy.count(),
   ]);
+
+  // Storage: leggiamo solo il provider attivo per mostrarlo a video.
+  // Le put/get reali avverranno nei flussi di brief intake e deliverable.
+  const storage = getStorage();
+  const storageProvider = storage.name;
+  const storageRoot = process.env.STORAGE_LOCAL_ROOT ?? './storage';
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 bg-zinc-50 p-12 font-sans dark:bg-black">
@@ -81,6 +88,19 @@ export default async function Home() {
               <Card label="pricing models" value={String(pricingCount)} highlight />
               <Card label="services" value={String(servicesCount)} highlight />
               <Card label="approval policies" value={String(policiesCount)} highlight />
+            </dl>
+          </section>
+
+          <section>
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+              Storage attivo
+            </h2>
+            <dl className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Card label="provider" value={storageProvider} />
+              <Card
+                label={storageProvider === 'local' ? 'root' : 'bucket'}
+                value={storageProvider === 'local' ? storageRoot : (process.env.S3_BUCKET ?? '—')}
+              />
             </dl>
           </section>
         </div>

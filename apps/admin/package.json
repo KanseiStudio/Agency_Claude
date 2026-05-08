@@ -16,7 +16,8 @@
     "react-dom": "19.2.4",
     "@kansei/shared": "workspace:*",
     "@kansei/database": "workspace:*",
-    "@kansei/auth": "workspace:*"
+    "@kansei/auth": "workspace:*",
+    "@kansei/storage": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

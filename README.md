@@ -10,6 +10,7 @@ Agenzia di comunicazione virtuale AI-driven.
 - [`SETUP-01-monorepo.md`](./SETUP-01-monorepo.md) — Step 1: setup iniziale del monorepo.
 - [`SETUP-02-database.md`](./SETUP-02-database.md) — Step 2: database MySQL + Prisma.
 - [`SETUP-03-admin-auth.md`](./SETUP-03-admin-auth.md) — Step 3: autenticazione admin (NextAuth v5).
+- [`SETUP-04-storage-and-client-auth.md`](./SETUP-04-storage-and-client-auth.md) — Step 4: storage astratto + autenticazione client portal.
 
 ## Struttura del repository
 
@@ -21,7 +22,8 @@ kansei-studio-agency/
 ├── packages/
 │   ├── shared/        # Tipi, schemi, definizioni agenti condivise
 │   ├── database/      # Schema Prisma + client DB (MySQL)
-│   └── auth/          # Helper auth condivisi (bcrypt, lookup utente)
+│   ├── auth/          # Helper auth condivisi (bcrypt, lookup utente)
+│   └── storage/       # StorageProvider (LocalFs + S3 stub)
 ├── docker-compose.yml # MySQL + Adminer per dev locale
 ├── package.json       # Root workspace
 ├── pnpm-workspace.yaml

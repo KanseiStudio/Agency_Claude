@@ -1,9 +1,5 @@
-// Middleware Next.js (Edge runtime). Protegge le rotte dell'app admin.
-//
-// Importante: usiamo `authConfig` "leggera" da auth.config.ts (nessun
-// import Prisma) e creiamo qui un'istanza NextAuth dedicata al middleware.
-// L'istanza completa di auth.ts (con Credentials + Prisma) NON è
-// edge-compatible.
+// Middleware del client portal (Edge runtime).
+// Usa la config "leggera" senza Prisma per essere edge-compatible.
 
 import NextAuth from 'next-auth';
 import { NextResponse } from 'next/server';
