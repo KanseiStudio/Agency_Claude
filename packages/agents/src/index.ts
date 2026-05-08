@@ -32,10 +32,20 @@ export {
 export type { FinanceAdminInput, FinanceAdminOutput, QuoteItem } from './agents/finance-admin';
 export { buildMockFinanceAdminResponse } from './agents/finance-admin/mock';
 
+// Agente: Creative Lead
+export {
+  creativeLeadAgent,
+  creativeLeadInputSchema,
+  creativeLeadOutputSchema,
+} from './agents/creative-lead';
+export type { CreativeLeadInput, CreativeLeadOutput } from './agents/creative-lead';
+export { buildMockCreativeLeadResponse } from './agents/creative-lead/mock';
+
 // Configurazione mock di default per V1: registriamo le risposte mock note.
 import { setMockResponseProvider } from './runtime/llm/mock';
 import { buildMockDirettoreResponse } from './agents/direttore-operativo/mock';
 import { buildMockFinanceAdminResponse } from './agents/finance-admin/mock';
+import { buildMockCreativeLeadResponse } from './agents/creative-lead/mock';
 
 setMockResponseProvider(({ agentName, userMessage }) => {
   switch (agentName) {
@@ -43,6 +53,8 @@ setMockResponseProvider(({ agentName, userMessage }) => {
       return buildMockDirettoreResponse(userMessage);
     case 'finance-admin':
       return buildMockFinanceAdminResponse(userMessage);
+    case 'creative-lead':
+      return buildMockCreativeLeadResponse(userMessage);
     default:
       throw new Error(`Nessuna risposta mock registrata per agente "${agentName}"`);
   }

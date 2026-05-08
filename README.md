@@ -14,6 +14,7 @@ Agenzia di comunicazione virtuale AI-driven.
 - [`SETUP-05-brief-intake.md`](./SETUP-05-brief-intake.md) — Step 5: primo flusso end-to-end (brief intake + approvazione admin).
 - [`SETUP-06-direttore-operativo.md`](./SETUP-06-direttore-operativo.md) — Step 6: framework agenti + Direttore Operativo (primo agente AI).
 - [`SETUP-07-finance-admin.md`](./SETUP-07-finance-admin.md) — Step 7: Finance/Admin agent + flusso preventivo cliente.
+- [`SETUP-08-creative-lead.md`](./SETUP-08-creative-lead.md) — Step 8: Creative Lead (concept + brief operativi).
 
 ## Struttura del repository
 

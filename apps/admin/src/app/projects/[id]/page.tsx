@@ -5,6 +5,7 @@ import { direttoreOutputSchema, type DirettoreOutput } from '@kansei/agents';
 import { ApprovalButtons } from './approval-buttons';
 import { DirettoreButton } from './direttore-button';
 import { GenerateQuoteButton, SendQuoteButton } from './finance-buttons';
+import { CreativeLeadButton } from './creative-button';
 
 export default async function AdminProjectDetailPage({
   params,
@@ -61,6 +62,16 @@ export default async function AdminProjectDetailPage({
     orderBy: { version: 'desc' },
     include: { items: { orderBy: { ordine: 'asc' } } },
   });
+
+  // Creative Lead output (più recente)
+  const creativeOutput = await prisma.projectCreativeOutput.findFirst({
+    where: { projectId: project.id },
+    orderBy: { version: 'desc' },
+  });
+
+  // Visibilità sezione Creative: dopo che il cliente ha accettato il preventivo
+  const isInProduction =
+    project.stato === 'preventivo_accettato' || project.stato === 'in_produzione';
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-12 font-sans">
@@ -363,6 +374,126 @@ export default async function AdminProjectDetailPage({
         </section>
       ) : null}
 
+      {/* Creative Lead */}
+      {isInProduction ? (
+        <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+              Creative Lead
+            </h2>
+            {creativeOutput ? (
+              <p className="text-xs text-zinc-500">v{creativeOutput.version}</p>
+            ) : null}
+          </div>
+
+          {!creativeOutput ? (
+            <div className="mt-3">
+              <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">
+                Il preventivo è stato accettato. Lancia il Creative Lead per generare concept e
+                brief operativi per Copy / Design / Video.
+              </p>
+              <CreativeLeadButton projectId={project.id} />
+            </div>
+          ) : (
+            <div className="mt-3 space-y-5">
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  Concept principale
+                </h3>
+                <p className="mt-2 rounded-lg bg-fuchsia-50 px-4 py-3 text-base font-medium italic text-fuchsia-900 dark:bg-fuchsia-950 dark:text-fuchsia-100">
+                  &ldquo;{creativeOutput.conceptPrincipale}&rdquo;
+                </p>
+              </div>
+
+              {Array.isArray(creativeOutput.alternativeConcepts) &&
+              (creativeOutput.alternativeConcepts as string[]).length > 0 ? (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    Concept alternativi
+                  </h3>
+                  <ul className="mt-2 space-y-2">
+                    {(creativeOutput.alternativeConcepts as string[]).map((c, i) => (
+                      <li
+                        key={i}
+                        className="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+                      >
+                        {c}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {creativeOutput.briefCopy ? (
+                  <BriefBlock title="Brief Copy" body={creativeOutput.briefCopy} />
+                ) : null}
+                {creativeOutput.briefDesign ? (
+                  <BriefBlock title="Brief Design" body={creativeOutput.briefDesign} />
+                ) : null}
+                {creativeOutput.briefVideo ? (
+                  <BriefBlock title="Brief Video" body={creativeOutput.briefVideo} />
+                ) : null}
+              </div>
+
+              {Array.isArray(creativeOutput.moodKeywords) ? (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    Mood keywords
+                  </h3>
+                  <ul className="mt-2 flex flex-wrap gap-1.5">
+                    {(creativeOutput.moodKeywords as string[]).map((k, i) => (
+                      <li
+                        key={i}
+                        className="rounded-full bg-zinc-100 px-2.5 py-0.5 font-mono text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                      >
+                        {k}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {Array.isArray(creativeOutput.mustHaves) &&
+                (creativeOutput.mustHaves as string[]).length > 0 ? (
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                      Must have
+                    </h3>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-800 dark:text-zinc-200">
+                      {(creativeOutput.mustHaves as string[]).map((m, i) => (
+                        <li key={i}>{m}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {Array.isArray(creativeOutput.mustAvoids) &&
+                (creativeOutput.mustAvoids as string[]).length > 0 ? (
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">
+                      Must avoid
+                    </h3>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-800 dark:text-zinc-200">
+                      {(creativeOutput.mustAvoids as string[]).map((m, i) => (
+                        <li key={i}>{m}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="flex items-center gap-3 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+                <CreativeLeadButton projectId={project.id} />
+                <span className="text-xs text-zinc-500">
+                  Cliccando rigeneri il concept (utile dopo modifiche al brief).
+                </span>
+              </div>
+            </div>
+          )}
+        </section>
+      ) : null}
+
       {project.events.length > 0 ? (
         <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
@@ -391,6 +522,15 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
     <div>
       <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</dt>
       <dd className="mt-0.5 text-sm font-medium text-zinc-900 dark:text-zinc-50">{children}</dd>
+    </div>
+  );
+}
+
+function BriefBlock({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{title}</h4>
+      <p className="mt-2 whitespace-pre-line text-sm text-zinc-800 dark:text-zinc-200">{body}</p>
     </div>
   );
 }

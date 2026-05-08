@@ -11,6 +11,7 @@ import {
   runAgent,
   direttoreOperativoAgent,
   financeAdminAgent,
+  creativeLeadAgent,
   direttoreOutputSchema,
   type FinanceAdminOutput,
 } from '@kansei/agents';
@@ -255,6 +256,111 @@ export async function runFinanceAdminAction(
   }
 
   revalidatePath(`/projects/${projectId}`);
+  return { ok: true };
+}
+
+/**
+ * Esegue il Creative Lead. Richiede preventivo accettato + Direttore già eseguito.
+ * Salva il concept + brief operativi in `project_creative_outputs`.
+ */
+export async function runCreativeLeadAction(
+  projectId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: {
+      client: { select: { ragioneSociale: true } },
+      briefs: { orderBy: { createdAt: 'desc' }, take: 1 },
+    },
+  });
+  if (!project) return { ok: false, error: 'Progetto non trovato.' };
+  const brief = project.briefs[0];
+  if (!brief) return { ok: false, error: 'Brief mancante.' };
+
+  // Direttore output (per riepilogo + complessità)
+  const direttoreRaw = await prisma.agentOutput.findFirst({
+    where: { projectId, agente: 'direttore-operativo', status: 'success' },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (!direttoreRaw) {
+    return { ok: false, error: 'Esegui prima il Direttore Operativo.' };
+  }
+  const direttoreParsed = direttoreOutputSchema.safeParse(direttoreRaw.payload);
+  if (!direttoreParsed.success) {
+    return { ok: false, error: 'Output Direttore non valido. Rieseguilo.' };
+  }
+  const direttore = direttoreParsed.data;
+
+  try {
+    const result = await runAgent(
+      creativeLeadAgent,
+      {
+        projectId: project.id,
+        codiceProgetto: project.codiceProgetto,
+        titolo: project.titolo,
+        descrizione: brief.descrizione,
+        deliverableRichiesti: Array.isArray(brief.deliverableRichiesti)
+          ? (brief.deliverableRichiesti as string[])
+          : [],
+        clientName: project.client.ragioneSociale,
+        direttoreSummary: direttore.summary,
+        estimatedComplexity: direttore.estimated_complexity,
+        language: project.language as 'it' | 'en',
+      },
+      { projectId: project.id },
+    );
+
+    const creative = result.output;
+    const existingCount = await prisma.projectCreativeOutput.count({
+      where: { projectId: project.id },
+    });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.projectCreativeOutput.create({
+        data: {
+          projectId: project.id,
+          conceptPrincipale: creative.concept_principale,
+          alternativeConcepts: creative.alternative_concepts as unknown as Prisma.InputJsonValue,
+          briefCopy: creative.brief_copy,
+          briefDesign: creative.brief_design,
+          briefVideo: creative.brief_video || null,
+          briefAudio: null,
+          moodKeywords: creative.mood_keywords as unknown as Prisma.InputJsonValue,
+          mustHaves: creative.must_haves as unknown as Prisma.InputJsonValue,
+          mustAvoids: creative.must_avoids as unknown as Prisma.InputJsonValue,
+          rawPayload: creative as unknown as Prisma.InputJsonValue,
+          version: existingCount + 1,
+        },
+      });
+
+      // Avanza lo stato a in_produzione (se non già lì)
+      if (project.stato === 'preventivo_accettato') {
+        await tx.project.update({
+          where: { id: project.id },
+          data: { stato: 'in_produzione' },
+        });
+      }
+
+      await tx.event.create({
+        data: { projectId: project.id, tipo: 'agent.creative_lead.success' },
+      });
+    });
+  } catch (e) {
+    const message = (e as Error).message;
+    await prisma.event.create({
+      data: {
+        projectId,
+        tipo: 'agent.creative_lead.failed',
+        payload: { error: message },
+      },
+    });
+    return { ok: false, error: `Creative Lead fallito: ${message}` };
+  }
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath('/projects');
   return { ok: true };
 }
 
