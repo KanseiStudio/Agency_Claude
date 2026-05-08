@@ -4,6 +4,7 @@ import { prisma } from '@kansei/database';
 import { direttoreOutputSchema, type DirettoreOutput } from '@kansei/agents';
 import { ApprovalButtons } from './approval-buttons';
 import { DirettoreButton } from './direttore-button';
+import { GenerateQuoteButton, SendQuoteButton } from './finance-buttons';
 
 export default async function AdminProjectDetailPage({
   params,
@@ -53,6 +54,13 @@ export default async function AdminProjectDetailPage({
     project.stato === 'preventivo_inviato' ||
     project.stato === 'preventivo_accettato' ||
     project.stato === 'in_produzione';
+
+  // Preventivo più recente
+  const latestQuote = await prisma.quote.findFirst({
+    where: { projectId: project.id },
+    orderBy: { version: 'desc' },
+    include: { items: { orderBy: { ordine: 'asc' } } },
+  });
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-12 font-sans">
@@ -240,6 +248,116 @@ export default async function AdminProjectDetailPage({
                   Cliccando ri-esegui l&apos;analisi (utile dopo modifiche al brief).
                 </span>
               </div>
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {/* Preventivo */}
+      {direttoreOutput ? (
+        <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+              Preventivo (Finance/Admin)
+            </h2>
+            {latestQuote ? (
+              <p className="text-xs text-zinc-500">
+                v{latestQuote.version} · {latestQuote.status}
+              </p>
+            ) : null}
+          </div>
+
+          {!latestQuote ? (
+            <div className="mt-3">
+              <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">
+                Il Direttore ha completato l&apos;analisi. Genera ora il preventivo strutturato (gap
+                massimo 15%).
+              </p>
+              <GenerateQuoteButton projectId={project.id} />
+            </div>
+          ) : (
+            <div className="mt-3 space-y-4">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <Detail label="Min">
+                  € {(latestQuote.prezzoMinCents / 100).toLocaleString('it-IT')}
+                </Detail>
+                <Detail label="Max">
+                  € {(latestQuote.prezzoMaxCents / 100).toLocaleString('it-IT')}
+                </Detail>
+                <Detail label="Gap">{Number(latestQuote.gapPct).toFixed(2)}%</Detail>
+                <Detail label="Valido fino">
+                  {latestQuote.validUntil
+                    ? latestQuote.validUntil.toLocaleDateString('it-IT')
+                    : '—'}
+                </Detail>
+              </div>
+
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  Voci del preventivo
+                </h3>
+                <table className="mt-2 w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800">
+                      <th className="py-2">Voce</th>
+                      <th className="py-2">Agente</th>
+                      <th className="py-2 text-right">Qta</th>
+                      <th className="py-2 text-right">Unitario</th>
+                      <th className="py-2 text-right">Totale</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-900">
+                    {latestQuote.items.map((it) => (
+                      <tr key={it.id}>
+                        <td className="py-2">
+                          {it.voce}
+                          {it.opzionale ? (
+                            <span className="ml-2 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] uppercase text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                              opzionale
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="py-2 font-mono text-xs text-zinc-600 dark:text-zinc-400">
+                          {it.agente ?? '—'}
+                        </td>
+                        <td className="py-2 text-right font-mono text-xs">{Number(it.quantita)}</td>
+                        <td className="py-2 text-right font-mono text-xs">
+                          € {(it.prezzoUnitarioCents / 100).toLocaleString('it-IT')}
+                        </td>
+                        <td className="py-2 text-right font-mono text-xs font-semibold">
+                          € {(it.prezzoTotaleCents / 100).toLocaleString('it-IT')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {latestQuote.status === 'draft' ? (
+                <div className="flex items-center gap-3">
+                  <SendQuoteButton projectId={project.id} />
+                  <span className="text-xs text-zinc-500">
+                    Una volta inviato, il cliente può accettare o rifiutare.
+                  </span>
+                </div>
+              ) : null}
+
+              {latestQuote.status === 'inviato' ? (
+                <p className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:bg-blue-950 dark:text-blue-100">
+                  Preventivo inviato al cliente. In attesa di risposta.
+                </p>
+              ) : null}
+              {latestQuote.status === 'accettato' ? (
+                <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
+                  Preventivo accettato dal cliente. Si può procedere con la produzione.
+                </p>
+              ) : null}
+              {latestQuote.status === 'rifiutato' ? (
+                <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-900 dark:bg-red-950 dark:text-red-100">
+                  Preventivo rifiutato dal cliente. Genera un nuovo preventivo dopo aver rivisto il
+                  piano.
+                </p>
+              ) : null}
             </div>
           )}
         </section>

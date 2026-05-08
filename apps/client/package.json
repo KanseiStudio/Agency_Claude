@@ -17,7 +17,8 @@
     "@kansei/shared": "workspace:*",
     "@kansei/database": "workspace:*",
     "@kansei/auth": "workspace:*",
-    "@kansei/storage": "workspace:*"
+    "@kansei/storage": "workspace:*",
+    "@kansei/agents": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

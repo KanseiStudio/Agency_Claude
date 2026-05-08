@@ -6,8 +6,14 @@
 
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
-import { prisma } from '@kansei/database';
-import { runAgent, direttoreOperativoAgent } from '@kansei/agents';
+import { prisma, Prisma } from '@kansei/database';
+import {
+  runAgent,
+  direttoreOperativoAgent,
+  financeAdminAgent,
+  direttoreOutputSchema,
+  type FinanceAdminOutput,
+} from '@kansei/agents';
 
 async function requireAdmin() {
   const session = await auth();
@@ -113,6 +119,182 @@ export async function runDirettoreOperativoAction(
   }
 
   revalidatePath(`/projects/${projectId}`);
+  return { ok: true };
+}
+
+/**
+ * Genera il preventivo via Finance/Admin agent.
+ * Richiede che il Direttore Operativo sia già stato eseguito (legge il suo output).
+ * Salva quote + quote_items + project_finance_outputs in transazione.
+ */
+export async function runFinanceAdminAction(
+  projectId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: {
+      client: { select: { ragioneSociale: true } },
+      briefs: { orderBy: { createdAt: 'desc' }, take: 1 },
+    },
+  });
+  if (!project) return { ok: false, error: 'Progetto non trovato.' };
+  const brief = project.briefs[0];
+  if (!brief) return { ok: false, error: 'Brief mancante.' };
+
+  // Output del Direttore (richiesto)
+  const direttoreRaw = await prisma.agentOutput.findFirst({
+    where: { projectId, agente: 'direttore-operativo', status: 'success' },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (!direttoreRaw) {
+    return { ok: false, error: 'Esegui prima il Direttore Operativo.' };
+  }
+  const direttoreParsed = direttoreOutputSchema.safeParse(direttoreRaw.payload);
+  if (!direttoreParsed.success) {
+    return { ok: false, error: 'Output Direttore non valido. Rieseguilo.' };
+  }
+  const direttore = direttoreParsed.data;
+
+  // Listino servizi attivi
+  const services = await prisma.serviceCatalog.findMany({
+    where: { attivo: true },
+    orderBy: { codice: 'asc' },
+  });
+
+  try {
+    const result = await runAgent(
+      financeAdminAgent,
+      {
+        projectId: project.id,
+        codiceProgetto: project.codiceProgetto,
+        titolo: project.titolo,
+        descrizione: brief.descrizione,
+        deliverableRichiesti: Array.isArray(brief.deliverableRichiesti)
+          ? (brief.deliverableRichiesti as string[])
+          : [],
+        budgetIndicativoEur: brief.budgetIndicativoCents ? brief.budgetIndicativoCents / 100 : null,
+        direttoreSummary: direttore.summary,
+        requiredAgents: direttore.required_agents,
+        estimatedComplexity: direttore.estimated_complexity,
+        servicesCatalog: services.map((s) => ({
+          codice: s.codice,
+          descrizione: s.descrizione,
+          prezzoBaseMinEur: s.prezzoBaseMinCents / 100,
+          prezzoBaseMaxEur: s.prezzoBaseMaxCents / 100,
+          agenteResponsabile: s.agenteResponsabile,
+        })),
+        language: project.language as 'it' | 'en',
+      },
+      { projectId: project.id },
+    );
+
+    const quote = result.output as FinanceAdminOutput;
+
+    // Persisti Quote + QuoteItem + project_finance_outputs in transazione
+    await prisma.$transaction(async (tx) => {
+      // Conta quote esistenti per versioning
+      const existingCount = await tx.quote.count({ where: { projectId } });
+
+      const quoteRow = await tx.quote.create({
+        data: {
+          projectId,
+          version: existingCount + 1,
+          prezzoMinCents: Math.round(quote.prezzo_min_eur * 100),
+          prezzoMaxCents: Math.round(quote.prezzo_max_eur * 100),
+          gapPct: new Prisma.Decimal(quote.gap_pct),
+          breakdown: quote.breakdown as unknown as Prisma.InputJsonValue,
+          validUntil: new Date(quote.valid_until),
+          status: 'draft',
+        },
+      });
+
+      await tx.quoteItem.createMany({
+        data: quote.breakdown.map((item, idx) => ({
+          quoteId: quoteRow.id,
+          agente: item.agente,
+          voce: item.voce,
+          quantita: new Prisma.Decimal(item.quantita),
+          prezzoUnitarioCents: Math.round(item.prezzo_unitario_eur * 100),
+          prezzoTotaleCents: Math.round(item.prezzo_totale_eur * 100),
+          opzionale: item.opzionale,
+          ordine: idx,
+        })),
+      });
+
+      await tx.projectFinanceOutput.create({
+        data: {
+          projectId,
+          prezzoMinCents: Math.round(quote.prezzo_min_eur * 100),
+          prezzoMaxCents: Math.round(quote.prezzo_max_eur * 100),
+          gapPct: new Prisma.Decimal(quote.gap_pct),
+          breakdown: quote.breakdown as unknown as Prisma.InputJsonValue,
+          conditions: quote.conditions as unknown as Prisma.InputJsonValue,
+          validUntil: new Date(quote.valid_until),
+          note: quote.note ?? null,
+          rawPayload: quote as unknown as Prisma.InputJsonValue,
+          version: existingCount + 1,
+        },
+      });
+
+      await tx.event.create({
+        data: { projectId, tipo: 'agent.finance_admin.success' },
+      });
+    });
+  } catch (e) {
+    const message = (e as Error).message;
+    await prisma.event.create({
+      data: {
+        projectId,
+        tipo: 'agent.finance_admin.failed',
+        payload: { error: message },
+      },
+    });
+    return { ok: false, error: `Finance/Admin fallito: ${message}` };
+  }
+
+  revalidatePath(`/projects/${projectId}`);
+  return { ok: true };
+}
+
+/**
+ * Invia il preventivo (più recente, in stato draft) al cliente.
+ * Cambia stato del progetto a `preventivo_inviato`.
+ */
+export async function sendQuoteAction(
+  projectId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await requireAdmin();
+
+  const draftQuote = await prisma.quote.findFirst({
+    where: { projectId, status: 'draft' },
+    orderBy: { version: 'desc' },
+  });
+  if (!draftQuote) {
+    return { ok: false, error: 'Nessun preventivo in stato draft da inviare.' };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.quote.update({
+      where: { id: draftQuote.id },
+      data: { status: 'inviato' },
+    });
+    await tx.project.update({
+      where: { id: projectId },
+      data: { stato: 'preventivo_inviato' },
+    });
+    await tx.event.create({
+      data: {
+        projectId,
+        tipo: 'project.quote_sent',
+        payload: { sentBy: session.user.email, quoteVersion: draftQuote.version },
+      },
+    });
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath('/projects');
   return { ok: true };
 }
 

@@ -13,6 +13,7 @@ Agenzia di comunicazione virtuale AI-driven.
 - [`SETUP-04-storage-and-client-auth.md`](./SETUP-04-storage-and-client-auth.md) — Step 4: storage astratto + autenticazione client portal.
 - [`SETUP-05-brief-intake.md`](./SETUP-05-brief-intake.md) — Step 5: primo flusso end-to-end (brief intake + approvazione admin).
 - [`SETUP-06-direttore-operativo.md`](./SETUP-06-direttore-operativo.md) — Step 6: framework agenti + Direttore Operativo (primo agente AI).
+- [`SETUP-07-finance-admin.md`](./SETUP-07-finance-admin.md) — Step 7: Finance/Admin agent + flusso preventivo cliente.
 
 ## Struttura del repository
 

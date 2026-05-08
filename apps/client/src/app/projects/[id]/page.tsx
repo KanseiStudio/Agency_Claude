@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@kansei/database';
+import { QuoteDecisionButtons } from './quote-buttons';
 
 export default async function ClientProjectDetailPage({
   params,
@@ -26,6 +27,27 @@ export default async function ClientProjectDetailPage({
   }
 
   const brief = project.briefs[0];
+
+  // Preventivo visibile al cliente (solo se inviato/accettato/rifiutato — mai draft)
+  const visibleQuote = await prisma.quote.findFirst({
+    where: {
+      projectId: project.id,
+      status: { in: ['inviato', 'accettato', 'rifiutato'] },
+    },
+    orderBy: { version: 'desc' },
+    include: { items: { orderBy: { ordine: 'asc' } } },
+  });
+
+  // Recupera le condizioni dal project_finance_outputs (più strutturato del JSON sul Quote)
+  const financeOutput = visibleQuote
+    ? await prisma.projectFinanceOutput.findFirst({
+        where: { projectId: project.id, version: visibleQuote.version },
+        select: { conditions: true, note: true },
+      })
+    : null;
+  const conditions = Array.isArray(financeOutput?.conditions)
+    ? (financeOutput.conditions as string[])
+    : [];
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-12 font-sans">
@@ -65,6 +87,92 @@ export default async function ClientProjectDetailPage({
         <p className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100">
           Brief rifiutato. Ti invitiamo a contattare l&apos;agenzia per discuterne.
         </p>
+      ) : null}
+      {project.stato === 'preventivo_inviato' ? (
+        <p className="mt-6 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900 dark:border-violet-900 dark:bg-violet-950 dark:text-violet-100">
+          È arrivato il preventivo. Leggilo qui sotto e accettalo per dare il via alla produzione,
+          oppure rifiutalo per discuterne con l&apos;agenzia.
+        </p>
+      ) : null}
+      {project.stato === 'preventivo_accettato' ? (
+        <p className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
+          Preventivo accettato. Il team partirà a breve con la produzione.
+        </p>
+      ) : null}
+
+      {visibleQuote ? (
+        <section className="mt-8 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            Preventivo · v{visibleQuote.version} · {visibleQuote.status}
+          </h2>
+
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Detail label="Min">
+              € {(visibleQuote.prezzoMinCents / 100).toLocaleString('it-IT')}
+            </Detail>
+            <Detail label="Max">
+              € {(visibleQuote.prezzoMaxCents / 100).toLocaleString('it-IT')}
+            </Detail>
+            <Detail label="Gap">{Number(visibleQuote.gapPct).toFixed(2)}%</Detail>
+            <Detail label="Valido fino">
+              {visibleQuote.validUntil ? visibleQuote.validUntil.toLocaleDateString('it-IT') : '—'}
+            </Detail>
+          </div>
+
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Voci</h3>
+            <table className="mt-2 w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800">
+                  <th className="py-2">Voce</th>
+                  <th className="py-2 text-right">Qta</th>
+                  <th className="py-2 text-right">Unitario</th>
+                  <th className="py-2 text-right">Totale</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-900">
+                {visibleQuote.items.map((it) => (
+                  <tr key={it.id}>
+                    <td className="py-2">
+                      {it.voce}
+                      {it.opzionale ? (
+                        <span className="ml-2 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] uppercase text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                          opzionale
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="py-2 text-right font-mono text-xs">{Number(it.quantita)}</td>
+                    <td className="py-2 text-right font-mono text-xs">
+                      € {(it.prezzoUnitarioCents / 100).toLocaleString('it-IT')}
+                    </td>
+                    <td className="py-2 text-right font-mono text-xs font-semibold">
+                      € {(it.prezzoTotaleCents / 100).toLocaleString('it-IT')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {conditions.length > 0 ? (
+            <div className="mt-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                Condizioni
+              </h3>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-zinc-700 dark:text-zinc-300">
+                {conditions.map((c, i) => (
+                  <li key={i}>{c}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {visibleQuote.status === 'inviato' ? (
+            <div className="mt-6 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+              <QuoteDecisionButtons projectId={project.id} />
+            </div>
+          ) : null}
+        </section>
       ) : null}
 
       {brief ? (
