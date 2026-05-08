@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { auth, signOut } from '@/auth';
 import type { Locale, ProjectStatus, ProjectType } from '@kansei/shared';
 import { prisma } from '@kansei/database';
@@ -11,11 +12,20 @@ export default async function Home() {
   const status: ProjectStatus = 'in_attesa_approvazione_admin';
   const type: ProjectType = 'one_shot';
 
-  const [userCount, pricingCount, servicesCount, policiesCount] = await Promise.all([
+  const [
+    userCount,
+    pricingCount,
+    servicesCount,
+    policiesCount,
+    pendingApprovalsCount,
+    projectsCount,
+  ] = await Promise.all([
     prisma.user.count(),
     prisma.pricingModel.count(),
     prisma.serviceCatalog.count(),
     prisma.approvalPolicy.count(),
+    prisma.project.count({ where: { stato: 'in_attesa_approvazione_admin' } }),
+    prisma.project.count(),
   ]);
 
   // Storage: leggiamo solo il provider attivo per mostrarlo a video.
@@ -68,6 +78,40 @@ export default async function Home() {
         ) : null}
 
         <div className="mt-8 space-y-6">
+          <section>
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+              Lavori in corso
+            </h2>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Link
+                href="/projects"
+                className="block rounded-lg border border-amber-200 bg-amber-50 p-4 transition-colors hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950 dark:hover:bg-amber-900"
+              >
+                <p className="text-xs font-medium uppercase tracking-wide text-amber-800 dark:text-amber-200">
+                  Approvazioni pendenti
+                </p>
+                <p className="mt-1 font-mono text-2xl font-semibold text-amber-900 dark:text-amber-100">
+                  {pendingApprovalsCount}
+                </p>
+                <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                  Click per gestire →
+                </p>
+              </Link>
+              <Link
+                href="/projects"
+                className="block rounded-lg bg-zinc-50 p-4 transition-colors hover:bg-zinc-100 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+              >
+                <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                  Progetti totali
+                </p>
+                <p className="mt-1 font-mono text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+                  {projectsCount}
+                </p>
+                <p className="mt-1 text-xs text-zinc-500">Click per vedere tutti →</p>
+              </Link>
+            </div>
+          </section>
+
           <section>
             <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
               Tipi condivisi (@kansei/shared)

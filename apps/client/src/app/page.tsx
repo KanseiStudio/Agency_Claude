@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { auth, signOut } from '@/auth';
 import type { AgentProvider, Locale } from '@kansei/shared';
 import { prisma } from '@kansei/database';
@@ -74,10 +75,20 @@ export default async function Home() {
             <p className="mt-1 font-mono text-2xl font-semibold text-emerald-900 dark:text-emerald-100">
               {myProjectsCount}
             </p>
-            <p className="mt-1 text-xs text-zinc-500">
-              Aggiornato in tempo reale dal database. Aumenterà quando aprirai nuovi progetti dal
-              portale.
-            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link
+                href="/projects"
+                className="rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-emerald-900 shadow-sm hover:bg-emerald-100 dark:bg-zinc-900 dark:text-emerald-100 dark:hover:bg-zinc-800"
+              >
+                Vedi tutti →
+              </Link>
+              <Link
+                href="/projects/new"
+                className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
+              >
+                + Nuovo brief
+              </Link>
+            </div>
           </div>
 
           <div className="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-900">

@@ -11,6 +11,7 @@ Agenzia di comunicazione virtuale AI-driven.
 - [`SETUP-02-database.md`](./SETUP-02-database.md) — Step 2: database MySQL + Prisma.
 - [`SETUP-03-admin-auth.md`](./SETUP-03-admin-auth.md) — Step 3: autenticazione admin (NextAuth v5).
 - [`SETUP-04-storage-and-client-auth.md`](./SETUP-04-storage-and-client-auth.md) — Step 4: storage astratto + autenticazione client portal.
+- [`SETUP-05-brief-intake.md`](./SETUP-05-brief-intake.md) — Step 5: primo flusso end-to-end (brief intake + approvazione admin).
 
 ## Struttura del repository
 
