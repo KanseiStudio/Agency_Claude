@@ -1,0 +1,864 @@
+// ============================================================================
+//   Kansei-Studio Agency · Schema Prisma
+// ============================================================================
+//
+// Convenzioni:
+//   - ID: stringa cuid() per evitare leak di sequenzialità
+//   - Nomi modello: PascalCase nel codice TS, snake_case nel DB (via @map)
+//   - Timestamps: createdAt/updatedAt sempre presenti dove ha senso
+//   - Enum: usati per stati e tipi a cardinalità fissa
+//
+// Riferimento: ROADMAP.md sezione "FASE 1 — Core layer condiviso · 1.1 Schema database"
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider          = "mysql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+// ============================================================================
+//   ANAGRAFICA
+// ============================================================================
+
+enum UserRole {
+  admin
+  client
+}
+
+enum Locale {
+  it
+  en
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String?  @map("password_hash")
+  role         UserRole @default(client)
+  locale       Locale   @default(it)
+  clientId     String?  @map("client_id")
+  client       Client?  @relation(fields: [clientId], references: [id])
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  approvalsDecided Approval[] @relation("ApprovalDecidedBy")
+
+  @@index([clientId])
+  @@map("users")
+}
+
+model Client {
+  id                String   @id @default(cuid())
+  ragioneSociale    String   @map("ragione_sociale")
+  pIva              String?  @unique @map("p_iva")
+  emailFatturazione String   @map("email_fatturazione")
+  indirizzo         String?  @db.Text
+  localePreferito   Locale   @default(it) @map("locale_preferito")
+  note              String?  @db.Text
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  users         User[]
+  projects      Project[]
+  subscriptions Subscription[]
+
+  @@map("clients")
+}
+
+// ============================================================================
+//   PROGETTI E BRIEF
+// ============================================================================
+
+enum ProjectType {
+  one_shot
+  recurring_cycle
+}
+
+enum ProjectStatus {
+  bozza
+  in_attesa_approvazione_admin
+  in_analisi
+  preventivo_inviato
+  preventivo_accettato
+  in_produzione
+  in_revisione
+  sospeso_costi
+  chiuso
+  annullato
+}
+
+model Project {
+  id                   String        @id @default(cuid())
+  clientId             String        @map("client_id")
+  client               Client        @relation(fields: [clientId], references: [id])
+  codiceProgetto       String        @unique @map("codice_progetto")
+  titolo               String
+  projectType          ProjectType   @default(one_shot) @map("project_type")
+  parentSubscriptionId String?       @map("parent_subscription_id")
+  parentSubscription   Subscription? @relation("SubscriptionCycles", fields: [parentSubscriptionId], references: [id])
+  stato                ProjectStatus @default(bozza)
+  language             Locale        @default(it)
+  costoStimatoCents    Int?          @map("costo_stimato_cents")
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
+  closedAt             DateTime?     @map("closed_at")
+
+  briefs                  Brief[]
+  files                   ProjectFile[]
+  quotes                  Quote[]
+  productionRuns          ProductionRun[]
+  revisionRounds          RevisionRound[]
+  agentOutputs            AgentOutput[]
+  agentLogs               AgentLog[]
+  agentRuns               AgentRun[]
+  tokenUsage              TokenUsage[]
+  externalApiUsage        ExternalApiUsage[]
+  costAlerts              CostAlert[]
+  deliverables            Deliverable[]
+  invoices                Invoice[]
+  approvals               Approval[]
+  blocks                  ClientBlock[]
+  events                  Event[]
+  strategyOutputs         ProjectStrategyOutput[]
+  researchOutputs         ProjectResearchOutput[]
+  creativeOutputs         ProjectCreativeOutput[]
+  financeOutputs          ProjectFinanceOutput[]
+  accountOutputs          ProjectAccountOutput[]
+  subscriptionDeliveryRef SubscriptionDelivery?   @relation("CycleProject")
+
+  @@index([clientId])
+  @@index([stato])
+  @@index([projectType])
+  @@map("projects")
+}
+
+model Brief {
+  id                    String    @id @default(cuid())
+  projectId             String    @map("project_id")
+  project               Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  descrizione           String    @db.Text
+  obiettivi             Json?     @map("obiettivi_json")
+  deliverableRichiesti  Json?     @map("deliverable_richiesti_json")
+  deadline              DateTime?
+  budgetIndicativoCents Int?      @map("budget_indicativo_cents")
+  filesMeta             Json?     @map("files_json")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  @@index([projectId])
+  @@map("briefs")
+}
+
+enum ProjectFileKind {
+  reference
+  working
+  deliverable
+}
+
+model ProjectFile {
+  id         String          @id @default(cuid())
+  projectId  String          @map("project_id")
+  project    Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tipo       ProjectFileKind
+  storageKey String          @map("storage_key")
+  filename   String
+  mime       String
+  dimensione BigInt?
+  uploadedBy String?         @map("uploaded_by")
+  createdAt  DateTime        @default(now()) @map("created_at")
+
+  @@index([projectId])
+  @@map("project_files")
+}
+
+// ============================================================================
+//   SUBSCRIPTION (lavori ricorrenti)
+// ============================================================================
+
+enum BillingCycle {
+  monthly
+  quarterly
+  yearly
+}
+
+enum SubscriptionStatus {
+  active
+  paused
+  canceled
+  trialing
+  past_due
+}
+
+model SubscriptionPlan {
+  id                  String       @id @default(cuid())
+  codice              String       @unique
+  nome                String
+  descrizione         String?      @db.Text
+  deliverablePerCiclo Json         @map("deliverable_per_ciclo_json")
+  prezzoMensileCents  Int          @map("prezzo_mensile_cents")
+  billingCycle        BillingCycle @default(monthly) @map("billing_cycle")
+  attivo              Boolean      @default(true)
+  createdAt           DateTime     @default(now()) @map("created_at")
+  updatedAt           DateTime     @updatedAt @map("updated_at")
+
+  subscriptions Subscription[]
+
+  @@map("subscription_plans")
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  clientId             String             @map("client_id")
+  client               Client             @relation(fields: [clientId], references: [id])
+  planId               String             @map("plan_id")
+  plan                 SubscriptionPlan   @relation(fields: [planId], references: [id])
+  stripeSubscriptionId String?            @unique @map("stripe_subscription_id")
+  status               SubscriptionStatus @default(active)
+  startedAt            DateTime           @map("started_at")
+  endedAt              DateTime?          @map("ended_at")
+  nextBillingAt        DateTime?          @map("next_billing_at")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  cycleProjects Project[]              @relation("SubscriptionCycles")
+  deliveries    SubscriptionDelivery[]
+
+  @@index([clientId])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+model SubscriptionDelivery {
+  id             String       @id @default(cuid())
+  subscriptionId String       @map("subscription_id")
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id])
+  cycleProjectId String?      @unique @map("cycle_project_id")
+  cycleProject   Project?     @relation("CycleProject", fields: [cycleProjectId], references: [id])
+  cycleStart     DateTime     @map("cycle_start")
+  cycleEnd       DateTime     @map("cycle_end")
+  status         String       @default("pending")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@index([subscriptionId])
+  @@map("subscription_deliveries")
+}
+
+// ============================================================================
+//   PREVENTIVI E PRODUZIONE
+// ============================================================================
+
+enum QuoteStatus {
+  draft
+  inviato
+  accettato
+  rifiutato
+  scaduto
+}
+
+model Quote {
+  id             String      @id @default(cuid())
+  projectId      String      @map("project_id")
+  project        Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version        Int         @default(1)
+  prezzoMinCents Int         @map("prezzo_min_cents")
+  prezzoMaxCents Int         @map("prezzo_max_cents")
+  gapPct         Decimal     @map("gap_pct") @db.Decimal(5, 2)
+  breakdown      Json?       @map("breakdown_json")
+  validUntil     DateTime?   @map("valid_until")
+  status         QuoteStatus @default(draft)
+  pdfStorageKey  String?     @map("pdf_storage_key")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  items    QuoteItem[]
+  invoices Invoice[]
+
+  @@index([projectId])
+  @@index([status])
+  @@map("quotes")
+}
+
+model QuoteItem {
+  id                  String  @id @default(cuid())
+  quoteId             String  @map("quote_id")
+  quote               Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  agente              String?
+  voce                String
+  quantita            Decimal @default(1) @db.Decimal(10, 2)
+  prezzoUnitarioCents Int     @map("prezzo_unitario_cents")
+  prezzoTotaleCents   Int     @map("prezzo_totale_cents")
+  opzionale           Boolean @default(false)
+  ordine              Int     @default(0)
+
+  @@index([quoteId])
+  @@map("quote_items")
+}
+
+enum ProductionRunStatus {
+  in_corso
+  completata
+  fallita
+  sospesa
+}
+
+model ProductionRun {
+  id          String              @id @default(cuid())
+  projectId   String              @map("project_id")
+  project     Project             @relation(fields: [projectId], references: [id])
+  quoteId     String?             @map("quote_id")
+  startedAt   DateTime            @default(now()) @map("started_at")
+  completedAt DateTime?           @map("completed_at")
+  stato       ProductionRunStatus @default(in_corso)
+  note        String?             @db.Text
+
+  @@index([projectId])
+  @@map("production_runs")
+}
+
+// ============================================================================
+//   REVISIONI
+// ============================================================================
+
+enum RevisionType {
+  incluso
+  extra_a_pagamento
+}
+
+enum RevisionStatus {
+  richiesta
+  in_lavorazione
+  completata
+  rifiutata
+}
+
+model RevisionRound {
+  id          String         @id @default(cuid())
+  projectId   String         @map("project_id")
+  project     Project        @relation(fields: [projectId], references: [id])
+  numero      Int
+  tipo        RevisionType
+  prezzoCents Int            @default(0) @map("prezzo_cents")
+  status      RevisionStatus @default(richiesta)
+  requestedAt DateTime       @default(now()) @map("requested_at")
+  completedAt DateTime?      @map("completed_at")
+
+  requests RevisionRequest[]
+
+  @@unique([projectId, numero])
+  @@index([projectId])
+  @@map("revision_rounds")
+}
+
+model RevisionRequest {
+  id                  String        @id @default(cuid())
+  roundId             String        @map("round_id")
+  round               RevisionRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  deliverableId       String?       @map("deliverable_id")
+  descrizioneModifica String        @map("descrizione_modifica") @db.Text
+  assetRiferimento    String?       @map("asset_riferimento")
+  createdAt           DateTime      @default(now()) @map("created_at")
+
+  @@index([roundId])
+  @@map("revision_requests")
+}
+
+// ============================================================================
+//   OUTPUT AGENTI · LOG · RUN
+// ============================================================================
+
+enum AgentOutputStatus {
+  pending
+  success
+  failed
+  needs_human_review
+}
+
+model AgentOutput {
+  id        String            @id @default(cuid())
+  projectId String            @map("project_id")
+  project   Project           @relation(fields: [projectId], references: [id])
+  agente    String
+  runId     String?           @map("run_id")
+  payload   Json              @map("payload_json")
+  status    AgentOutputStatus @default(pending)
+  version   Int               @default(1)
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  @@index([projectId, agente])
+  @@index([runId])
+  @@map("agent_outputs")
+}
+
+enum LogLevel {
+  debug
+  info
+  warn
+  error
+}
+
+model AgentLog {
+  id        String   @id @default(cuid())
+  projectId String?  @map("project_id")
+  project   Project? @relation(fields: [projectId], references: [id])
+  agente    String
+  runId     String?  @map("run_id")
+  livello   LogLevel @default(info)
+  messaggio String   @db.Text
+  payload   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([projectId])
+  @@index([runId])
+  @@index([agente, createdAt])
+  @@map("agent_logs")
+}
+
+enum AgentRunStatus {
+  running
+  success
+  failed
+  timeout
+}
+
+model AgentRun {
+  id         String         @id @default(cuid())
+  projectId  String?        @map("project_id")
+  project    Project?       @relation(fields: [projectId], references: [id])
+  agente     String
+  workflowId String?        @map("workflow_id")
+  startedAt  DateTime       @default(now()) @map("started_at")
+  endedAt    DateTime?      @map("ended_at")
+  status     AgentRunStatus @default(running)
+  latencyMs  Int?           @map("latency_ms")
+
+  tokenUsage       TokenUsage[]
+  externalApiUsage ExternalApiUsage[]
+
+  @@index([projectId])
+  @@index([agente, startedAt])
+  @@map("agent_runs")
+}
+
+// ============================================================================
+//   OUTPUT STRUTTURATI PER AGENTE (tabelle dedicate)
+// ============================================================================
+
+model ProjectStrategyOutput {
+  id                  String   @id @default(cuid())
+  projectId           String   @map("project_id")
+  project             Project  @relation(fields: [projectId], references: [id])
+  strategySummary     String?  @map("strategy_summary") @db.Text
+  targetAnalysis      String?  @map("target_analysis") @db.Text
+  positioning         String?  @db.Text
+  toneOfVoice         String?  @map("tone_of_voice") @db.Text
+  campaignAngle       String?  @map("campaign_angle") @db.Text
+  recommendedChannels Json?    @map("recommended_channels")
+  kpi                 Json?
+  risks               Json?
+  missingInformation  Json?    @map("missing_information")
+  rawPayload          Json?    @map("raw_payload")
+  status              String   @default("draft")
+  version             Int      @default(1)
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@index([projectId])
+  @@map("project_strategy_outputs")
+}
+
+model ProjectResearchOutput {
+  id             String   @id @default(cuid())
+  projectId      String   @map("project_id")
+  project        Project  @relation(fields: [projectId], references: [id])
+  competitors    Json?
+  trends         Json?
+  targetInsights Json?    @map("target_insights")
+  whiteSpaces    Json?    @map("white_spaces")
+  risks          Json?
+  sources        Json?
+  rawPayload     Json?    @map("raw_payload")
+  version        Int      @default(1)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([projectId])
+  @@map("project_research_outputs")
+}
+
+model ProjectCreativeOutput {
+  id                  String   @id @default(cuid())
+  projectId           String   @map("project_id")
+  project             Project  @relation(fields: [projectId], references: [id])
+  conceptPrincipale   String?  @map("concept_principale") @db.Text
+  alternativeConcepts Json?    @map("alternative_concepts")
+  briefCopy           String?  @map("brief_copy") @db.Text
+  briefDesign         String?  @map("brief_design") @db.Text
+  briefVideo          String?  @map("brief_video") @db.Text
+  briefAudio          String?  @map("brief_audio") @db.Text
+  moodKeywords        Json?    @map("mood_keywords")
+  mustHaves           Json?    @map("must_haves")
+  mustAvoids          Json?    @map("must_avoids")
+  rawPayload          Json?    @map("raw_payload")
+  version             Int      @default(1)
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@index([projectId])
+  @@map("project_creative_outputs")
+}
+
+model ProjectFinanceOutput {
+  id             String    @id @default(cuid())
+  projectId      String    @map("project_id")
+  project        Project   @relation(fields: [projectId], references: [id])
+  prezzoMinCents Int       @map("prezzo_min_cents")
+  prezzoMaxCents Int       @map("prezzo_max_cents")
+  gapPct         Decimal   @map("gap_pct") @db.Decimal(5, 2)
+  breakdown      Json?
+  conditions     Json?
+  validUntil     DateTime? @map("valid_until")
+  note           String?   @db.Text
+  rawPayload     Json?     @map("raw_payload")
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@index([projectId])
+  @@map("project_finance_outputs")
+}
+
+model ProjectAccountOutput {
+  id                   String   @id @default(cuid())
+  projectId            String   @map("project_id")
+  project              Project  @relation(fields: [projectId], references: [id])
+  messaggioCliente     String?  @map("messaggio_cliente") @db.Text
+  motivazioneRichiesta String?  @map("motivazione_richiesta") @db.Text
+  infoMancanti         Json?    @map("info_mancanti")
+  domandePerCliente    Json?    @map("domande_per_cliente")
+  statoRichiesta       String   @default("pending") @map("stato_richiesta")
+  sentiment            String?
+  suggestedNextStep    String?  @map("suggested_next_step")
+  rawPayload           Json?    @map("raw_payload")
+  version              Int      @default(1)
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  @@index([projectId])
+  @@map("project_account_outputs")
+}
+
+// ============================================================================
+//   TRACKING TOKEN E COSTI
+// ============================================================================
+
+model PricingModel {
+  id               String    @id @default(cuid())
+  provider         String
+  model            String
+  inputPricePer1k  Decimal   @map("input_price_per_1k") @db.Decimal(12, 6)
+  outputPricePer1k Decimal   @map("output_price_per_1k") @db.Decimal(12, 6)
+  cachedPricePer1k Decimal?  @map("cached_price_per_1k") @db.Decimal(12, 6)
+  unitType         String?   @default("token") @map("unit_type")
+  currency         String    @default("USD")
+  validFrom        DateTime  @map("valid_from")
+  validTo          DateTime? @map("valid_to")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@unique([provider, model, validFrom])
+  @@index([provider, model])
+  @@map("pricing_models")
+}
+
+model TokenUsage {
+  id           String    @id @default(cuid())
+  runId        String?   @map("run_id")
+  run          AgentRun? @relation(fields: [runId], references: [id])
+  projectId    String?   @map("project_id")
+  project      Project?  @relation(fields: [projectId], references: [id])
+  agente       String
+  provider     String
+  model        String
+  inputTokens  Int       @default(0) @map("input_tokens")
+  outputTokens Int       @default(0) @map("output_tokens")
+  cachedTokens Int       @default(0) @map("cached_tokens")
+  totalTokens  Int       @default(0) @map("total_tokens")
+  costUsd      Decimal   @default(0) @map("cost_usd") @db.Decimal(12, 6)
+  costEur      Decimal   @default(0) @map("cost_eur") @db.Decimal(12, 6)
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([projectId])
+  @@index([agente, createdAt])
+  @@index([provider, model])
+  @@map("token_usage")
+}
+
+model ExternalApiUsage {
+  id        String    @id @default(cuid())
+  runId     String?   @map("run_id")
+  run       AgentRun? @relation(fields: [runId], references: [id])
+  projectId String?   @map("project_id")
+  project   Project?  @relation(fields: [projectId], references: [id])
+  agente    String
+  provider  String
+  endpoint  String?
+  units     Decimal   @db.Decimal(14, 4)
+  unitType  String    @map("unit_type")
+  costUsd   Decimal   @default(0) @map("cost_usd") @db.Decimal(12, 6)
+  costEur   Decimal   @default(0) @map("cost_eur") @db.Decimal(12, 6)
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([projectId])
+  @@index([agente, createdAt])
+  @@map("external_api_usage")
+}
+
+enum CostAlertScope {
+  agency_daily
+  agency_weekly
+  agency_monthly
+  project
+  agent_run
+}
+
+enum CostAlertSeverity {
+  yellow
+  red
+  hard_stop
+}
+
+model CostAlert {
+  id           String            @id @default(cuid())
+  scope        CostAlertScope
+  severity     CostAlertSeverity
+  sogliaCents  Int               @map("soglia_cents")
+  attualeCents Int               @map("attuale_cents")
+  projectId    String?           @map("project_id")
+  project      Project?          @relation(fields: [projectId], references: [id])
+  agente       String?
+  raisedAt     DateTime          @default(now()) @map("raised_at")
+  resolvedAt   DateTime?         @map("resolved_at")
+  note         String?           @db.Text
+
+  @@index([projectId])
+  @@index([scope, severity, raisedAt])
+  @@map("cost_alerts")
+}
+
+// ============================================================================
+//   DELIVERABLE
+// ============================================================================
+
+enum DeliverableStatus {
+  bozza
+  qa_passed
+  approvato_cliente
+  consegnato
+}
+
+model Deliverable {
+  id             String            @id @default(cuid())
+  projectId      String            @map("project_id")
+  project        Project           @relation(fields: [projectId], references: [id])
+  tipo           String
+  titolo         String
+  storageKey     String            @map("storage_key")
+  mime           String?
+  agenteCreatore String?           @map("agente_creatore")
+  status         DeliverableStatus @default(bozza)
+  language       Locale            @default(it)
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  versions DeliverableVersion[]
+
+  @@index([projectId])
+  @@index([status])
+  @@map("deliverables")
+}
+
+model DeliverableVersion {
+  id            String      @id @default(cuid())
+  deliverableId String      @map("deliverable_id")
+  deliverable   Deliverable @relation(fields: [deliverableId], references: [id], onDelete: Cascade)
+  version       Int
+  storageKey    String      @map("storage_key")
+  note          String?     @db.Text
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@unique([deliverableId, version])
+  @@map("deliverable_versions")
+}
+
+// ============================================================================
+//   FATTURAZIONE E PAGAMENTI
+// ============================================================================
+
+enum InvoiceStatus {
+  draft
+  emessa
+  pagata
+  scaduta
+  annullata
+}
+
+enum PaymentMethod {
+  stripe
+  paypal
+  bonifico
+}
+
+enum PaymentStatus {
+  pending
+  succeeded
+  failed
+  refunded
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  projectId     String        @map("project_id")
+  project       Project       @relation(fields: [projectId], references: [id])
+  quoteId       String?       @map("quote_id")
+  quote         Quote?        @relation(fields: [quoteId], references: [id])
+  numero        String        @unique
+  importoCents  Int           @map("importo_cents")
+  valuta        String        @default("EUR")
+  status        InvoiceStatus @default(draft)
+  pdfStorageKey String?       @map("pdf_storage_key")
+  issuedAt      DateTime?     @map("issued_at")
+  paidAt        DateTime?     @map("paid_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  payments Payment[]
+
+  @@index([projectId])
+  @@index([status])
+  @@map("invoices")
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  invoiceId     String        @map("invoice_id")
+  invoice       Invoice       @relation(fields: [invoiceId], references: [id])
+  importoCents  Int           @map("importo_cents")
+  metodo        PaymentMethod
+  transactionId String?       @unique @map("transaction_id")
+  status        PaymentStatus @default(pending)
+  metadata      Json?
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  @@index([invoiceId])
+  @@map("payments")
+}
+
+// ============================================================================
+//   APPROVAZIONI UMANE
+// ============================================================================
+
+enum ApprovalCheckpoint {
+  brief_iniziale
+  concept_creativo
+  testi_finali
+  materiali_finali
+  preventivo
+  extra_revision
+  cost_overrun_yellow
+  cost_overrun_red
+}
+
+enum ApprovalEsito {
+  pending
+  approvato
+  rifiutato
+  modifiche_richieste
+}
+
+model Approval {
+  id             String             @id @default(cuid())
+  projectId      String             @map("project_id")
+  project        Project            @relation(fields: [projectId], references: [id])
+  checkpointCode ApprovalCheckpoint @map("checkpoint_code")
+  payload        Json?              @map("payload_json")
+  esito          ApprovalEsito      @default(pending)
+  decidedById    String?            @map("decided_by")
+  decidedBy      User?              @relation("ApprovalDecidedBy", fields: [decidedById], references: [id])
+  note           String?            @db.Text
+  requestedAt    DateTime           @default(now()) @map("requested_at")
+  decidedAt      DateTime?          @map("decided_at")
+
+  @@index([projectId])
+  @@index([checkpointCode, esito])
+  @@map("approvals")
+}
+
+model ApprovalPolicy {
+  id             String             @id @default(cuid())
+  checkpointCode ApprovalCheckpoint @unique @map("checkpoint_code")
+  automatic      Boolean            @default(false)
+  autoRule       Json?              @map("auto_rule_json")
+  description    String?            @db.Text
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  @@map("approval_policies")
+}
+
+// ============================================================================
+//   BLOCCHI CLIENTE (campagne sospese)
+// ============================================================================
+
+enum BlockArea {
+  social_campaign
+  press_campaign
+}
+
+model ClientBlock {
+  id                     String    @id @default(cuid())
+  projectId              String    @map("project_id")
+  project                Project   @relation(fields: [projectId], references: [id])
+  area                   BlockArea
+  motivo                 String?   @db.Text
+  attivoFrom             DateTime  @default(now()) @map("attivo_from")
+  attivoTo               DateTime? @map("attivo_to")
+  importoRimborsatoCents Int?      @map("importo_rimborsato_cents")
+
+  @@index([projectId])
+  @@map("client_blocks")
+}
+
+// ============================================================================
+//   CATALOGO SERVIZI
+// ============================================================================
+
+model ServiceCatalog {
+  id                 String   @id @default(cuid())
+  codice             String   @unique
+  descrizione        String
+  prezzoBaseMinCents Int      @map("prezzo_base_min_cents")
+  prezzoBaseMaxCents Int      @map("prezzo_base_max_cents")
+  agenteResponsabile String?  @map("agente_responsabile")
+  attivo             Boolean  @default(true)
+  metadata           Json?
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("services_catalog")
+}
+
+// ============================================================================
+//   BUS EVENTI INTERNO
+// ============================================================================
+
+model Event {
+  id        String   @id @default(cuid())
+  projectId String?  @map("project_id")
+  project   Project? @relation(fields: [projectId], references: [id])
+  tipo      String
+  payload   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([projectId, createdAt])
+  @@index([tipo, createdAt])
+  @@map("events")
+}

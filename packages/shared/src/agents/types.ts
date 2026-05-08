@@ -3,7 +3,7 @@
 // implementa questa interfaccia, garantendo coerenza fra Next.js e n8n.
 
 import type { z, ZodTypeAny } from 'zod';
-import type { AgentProvider } from '../types/index.js';
+import type { AgentProvider } from '../types/index';
 
 /**
  * Definizione formale di un agente AI.

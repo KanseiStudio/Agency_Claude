@@ -3,23 +3,27 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build",
-    "start": "next start",
+    "dev": "dotenv -e ../../.env -- next dev --turbopack",
+    "build": "dotenv -e ../../.env -- next build",
+    "start": "dotenv -e ../../.env -- next start",
     "lint": "echo 'lint placeholder'",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "next": "16.2.6",
+    "next-auth": "5.0.0-beta.25",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "@kansei/shared": "workspace:*"
+    "@kansei/shared": "workspace:*",
+    "@kansei/database": "workspace:*",
+    "@kansei/auth": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv-cli": "^7.4.4",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

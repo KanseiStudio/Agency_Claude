@@ -1,0 +1,66 @@
+# Docker Compose per ambiente di sviluppo locale.
+#
+# Servizi forniti:
+#   - mysql       database principale dell'applicazione (Prisma)
+#   - adminer     UI web per ispezionare il DB durante lo sviluppo
+#
+# In una fase successiva aggiungeremo qui anche:
+#   - postgres    metadata DB di n8n
+#   - n8n         workflow orchestrator
+#   - minio       storage S3-compatibile (opzionale)
+#
+# Avvio:    docker compose up -d
+# Stop:     docker compose down
+# Reset:    docker compose down -v   (attenzione: cancella i dati)
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: kansei-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword_change_me}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-kansei_agency}
+      MYSQL_USER: ${MYSQL_USER:-kansei}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-kansei_dev_password}
+    ports:
+      # Espone MySQL sulla 3307 invece della 3306 default,
+      # per evitare conflitti con eventuali installazioni MySQL native.
+      - '3307:3306'
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # Init scripts: eseguiti SOLO alla prima inizializzazione
+      # (cioè quando il volume mysql_data è vuoto). Creano il
+      # database shadow per Prisma migrate dev.
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # In MySQL 8.4 mysqladmin ping accetta credenziali via env var,
+      # evitando il warning "password on command line".
+      test: ['CMD-SHELL', 'mysqladmin ping -h localhost -uroot -p"$$MYSQL_ROOT_PASSWORD" --silent']
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+    command:
+      # caching_sha2_password è già il default in MySQL 8.4,
+      # quindi non c'è bisogno di forzarlo (e il flag --default-authentication-plugin
+      # è stato rimosso da 8.4 in poi: scriverlo causa il fallimento dell'avvio).
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+
+  adminer:
+    image: adminer:4
+    container_name: kansei-adminer
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+    environment:
+      ADMINER_DEFAULT_SERVER: mysql
+      ADMINER_DESIGN: pepa-linha
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
+    name: kansei_mysql_data

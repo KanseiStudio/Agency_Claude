@@ -51,6 +51,10 @@ coverage/
 # --- Prisma ---
 # I file generati vanno ignorati, gli schema no
 **/node_modules/.prisma/
+**/prisma/migrations/dev.db*
+
+# --- Docker volumes (mai committarli) ---
+docker-data/
 
 # --- Misc ---
 .cache/
