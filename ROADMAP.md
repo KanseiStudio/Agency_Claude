@@ -78,15 +78,18 @@ Obiettivo: avere il terreno di gioco pronto prima di scrivere logica di business
 Tabelle minime da creare in MySQL.
 
 ### Anagrafica
+
 - `users` (id, email, password_hash, role, locale, created_at)
 - `clients` (id, ragione_sociale, p_iva, email_fatturazione, indirizzo, locale_preferito, note, created_at)
 
 ### Progetti
+
 - `projects` (id, client_id, codice_progetto, titolo, project_type, parent_subscription_id, stato, language, created_at, closed_at)
   - `project_type`: `one_shot` | `recurring_cycle`
   - stati: `bozza`, `in_attesa_approvazione_admin`, `in_analisi`, `preventivo_inviato`, `preventivo_accettato`, `in_produzione`, `in_revisione`, `chiuso`, `annullato`, `sospeso_costi`
 
 ### Subscription (lavori ricorrenti)
+
 - `subscription_plans` (id, codice, nome, descrizione, deliverable_per_ciclo_json, prezzo_mensile, billing_cycle, attivo)
 - `subscriptions` (id, client_id, plan_id, stripe_subscription_id, status, started_at, ended_at, next_billing_at, current_cycle_project_id)
 - `subscription_deliveries` (id, subscription_id, cycle_project_id, cycle_start, cycle_end, status)
@@ -94,17 +97,20 @@ Tabelle minime da creare in MySQL.
 - `project_files` (id, project_id, tipo, path_storage, mime, dimensione, uploaded_by, created_at)
 
 ### Preventivo e produzione
+
 - `quotes` (id, project_id, version, prezzo_min, prezzo_max, gap_pct, breakdown_json, valid_until, status, created_at)
   - status: `draft`, `inviato`, `accettato`, `rifiutato`, `scaduto`
 - `quote_items` (id, quote_id, agente, voce, quantità, prezzo_unitario, prezzo_totale, opzionale_bool)
 - `production_runs` (id, project_id, quote_id, started_at, completed_at, stato)
 
 ### Revisioni
+
 - `revision_rounds` (id, project_id, numero, tipo, prezzo, status, requested_at, completed_at)
   - tipo: `incluso` (1-3) o `extra_a_pagamento`
 - `revision_requests` (id, round_id, deliverable_id, descrizione_modifica, asset_riferimento)
 
 ### Output agenti
+
 - `agent_outputs` (id, project_id, agente, run_id, payload_json, status, version, created_at)
   - status: `pending`, `success`, `failed`, `needs_human_review`
 - `agent_logs` (id, project_id, agente, run_id, livello, messaggio, payload, created_at)
@@ -116,6 +122,7 @@ Tabelle minime da creare in MySQL.
   - `project_account_outputs`
 
 ### Consumo token e costi (vedi Fase 1.5 per dettaglio)
+
 - `agent_runs` (id, project_id, agente, workflow_id, started_at, ended_at, status, latency_ms)
 - `token_usage` (id, run_id, project_id, agente, provider, model, input_tokens, output_tokens, cached_tokens, total_tokens, cost_usd, cost_eur, created_at)
 - `external_api_usage` (id, run_id, project_id, agente, provider, endpoint, units, unit_type, cost_usd, cost_eur, created_at) — per costi non-LLM (image gen, video gen, TTS, web search)
@@ -123,25 +130,30 @@ Tabelle minime da creare in MySQL.
 - `cost_alerts` (id, scope, soglia, attuale, project_id, agente, raised_at, resolved_at)
 
 ### Deliverable e materiali finali
+
 - `deliverables` (id, project_id, tipo, titolo, path_storage, mime, agente_creatore, status, created_at)
   - status: `bozza`, `qa_passed`, `approvato_cliente`, `consegnato`
 - `deliverable_versions` (id, deliverable_id, version, path_storage, note, created_at)
 
 ### Pagamenti
+
 - `invoices` (id, project_id, numero, importo, valuta, status, issued_at, paid_at)
 - `payments` (id, invoice_id, importo, metodo, transaction_id, status, created_at)
 
 ### Approvazioni umane
+
 - `approvals` (id, project_id, checkpoint_code, payload_json, requested_at, decided_at, decided_by, esito, note)
 - `approval_policies` (id, checkpoint_code, automatic, auto_rule_json, description)
   - checkpoint_code: `brief_iniziale`, `concept_creativo`, `testi_finali`, `materiali_finali`, `preventivo`, `extra_revision`, `cost_overrun_yellow`, `cost_overrun_red`
   - In V1 tutti i record hanno `automatic = false`. Toggle futuro per automazione progressiva senza modifica codice.
 
 ### Blocchi cliente
+
 - `client_blocks` (id, project_id, area, motivo, attivo_from, importo_rimborsato_o_ridotto)
   - area: `social_campaign`, `press_campaign`
 
 ### Lookup
+
 - `services_catalog` (id, codice, descrizione, prezzo_base_min, prezzo_base_max, agente_responsabile)
 
 ## 1.2 Sistema di tracking token e costi
@@ -195,6 +207,7 @@ Componente trasversale a tutti gli agenti. Obiettivo: sapere in ogni momento qua
 ### 1.2.6 Vista admin token & costi
 
 Dashboard dedicata con:
+
 - KPI top: token totali oggi/settimana/mese, costo totale, costo medio per progetto, modello più costoso
 - Grafico time-series consumo token per giorno (stack per agente)
 - Tabella per agente: token totali, costo, n. run, costo medio per run, latenza media
@@ -231,23 +244,23 @@ Dashboard dedicata con:
 
 Punto di partenza, da affinare con i test reali:
 
-| Agente | Provider | Modello | Razionale |
-|--------|----------|---------|-----------|
-| Direttore Operativo | Anthropic | claude-sonnet-4-6 | Routing complesso, ragionamento multi-step |
-| Account Manager | Anthropic | claude-haiku-4-5 | Risposte cliente brevi, basso costo |
-| Finance/Admin | OpenAI | gpt-4o + Structured Outputs | Calcoli + JSON garantito |
-| Brand/Marketing Strategist | Anthropic | claude-sonnet-4-6 | Long-form strategy, scrittura italiana |
-| Research Agent | Anthropic | claude-sonnet-4-6 | Long context, sintesi |
-| Creative Lead | Anthropic | claude-sonnet-4-6 | Concept creativi |
-| Copy Agent | Anthropic | claude-sonnet-4-6 (Opus per premium) | Qualità testo italiano |
-| Art & Design (direzione + prompt) | Anthropic | claude-sonnet-4-6 | Direzione testuale |
-| Art & Design (generazione immagini) | Google + fal.ai | gemini-2.5-flash-image (Nano Banana), Seedance | Generazione native |
-| Video/Audio (storyboard testuale) | Anthropic | claude-sonnet-4-6 | Scrittura scaletta |
-| Video/Audio (generazione video) | fal.ai | Seedance, Kling, Wan | Aggregator V1 |
-| Video/Audio (TTS) | OpenAI | tts-1 / tts-1-hd | Voci di partenza, ElevenLabs in opzione premium |
-| Video/Audio (STT) | OpenAI | whisper-1 | Trascrizione/sottotitoli |
-| Publishing & Performance | Anthropic | claude-haiku-4-5 | Operativo, basso costo |
-| QA Agent (V2) | OpenAI | gpt-4o-mini | Veloce, basso costo, JSON enforced |
+| Agente                              | Provider        | Modello                                        | Razionale                                       |
+| ----------------------------------- | --------------- | ---------------------------------------------- | ----------------------------------------------- |
+| Direttore Operativo                 | Anthropic       | claude-sonnet-4-6                              | Routing complesso, ragionamento multi-step      |
+| Account Manager                     | Anthropic       | claude-haiku-4-5                               | Risposte cliente brevi, basso costo             |
+| Finance/Admin                       | OpenAI          | gpt-4o + Structured Outputs                    | Calcoli + JSON garantito                        |
+| Brand/Marketing Strategist          | Anthropic       | claude-sonnet-4-6                              | Long-form strategy, scrittura italiana          |
+| Research Agent                      | Anthropic       | claude-sonnet-4-6                              | Long context, sintesi                           |
+| Creative Lead                       | Anthropic       | claude-sonnet-4-6                              | Concept creativi                                |
+| Copy Agent                          | Anthropic       | claude-sonnet-4-6 (Opus per premium)           | Qualità testo italiano                          |
+| Art & Design (direzione + prompt)   | Anthropic       | claude-sonnet-4-6                              | Direzione testuale                              |
+| Art & Design (generazione immagini) | Google + fal.ai | gemini-2.5-flash-image (Nano Banana), Seedance | Generazione native                              |
+| Video/Audio (storyboard testuale)   | Anthropic       | claude-sonnet-4-6                              | Scrittura scaletta                              |
+| Video/Audio (generazione video)     | fal.ai          | Seedance, Kling, Wan                           | Aggregator V1                                   |
+| Video/Audio (TTS)                   | OpenAI          | tts-1 / tts-1-hd                               | Voci di partenza, ElevenLabs in opzione premium |
+| Video/Audio (STT)                   | OpenAI          | whisper-1                                      | Trascrizione/sottotitoli                        |
+| Publishing & Performance            | Anthropic       | claude-haiku-4-5                               | Operativo, basso costo                          |
+| QA Agent (V2)                       | OpenAI          | gpt-4o-mini                                    | Veloce, basso costo, JSON enforced              |
 
 ## 1.5 Bus eventi interno
 
@@ -259,6 +272,7 @@ Punto di partenza, da affinare con i test reali:
 # FASE 2 — Agenti V1: sviluppo uno per uno
 
 Per ogni agente l'iter è identico:
+
 1. Definire prompt operativo (italiano, system + user, con esempi)
 2. Definire schema input e schema output JSON
 3. Creare workflow n8n
@@ -273,6 +287,7 @@ Per ogni agente l'iter è identico:
 Ruolo: capo agenzia AI, smista i task agli specialisti.
 
 **Task da sviluppare:**
+
 - Definire prompt sistema (riceve brief, decide quali agenti coinvolgere, produce piano)
 - Schema output JSON: `{ project_id, summary, required_agents[], execution_plan[], priority, estimated_complexity, risks, missing_info }`
 - Workflow n8n con nodi:
@@ -293,6 +308,7 @@ Ruolo: capo agenzia AI, smista i task agli specialisti.
 Ruolo: interfaccia con cliente, raccoglie e qualifica la richiesta.
 
 **Task da sviluppare:**
+
 - Prompt: legge messaggio cliente, identifica obiettivi, individua informazioni mancanti, propone domande di chiarimento
 - Schema output JSON: `{ project_id, messaggio_cliente, motivazione_richiesta, info_mancanti[], domande_per_cliente[], stato_richiesta, sentiment, suggested_next_step }`
 - Workflow n8n: webhook → LLM → salvataggio → notifica admin
@@ -311,6 +327,7 @@ Ruolo: interfaccia con cliente, raccoglie e qualifica la richiesta.
 Ruolo: stima prezzi, gestisce preventivi, fatture, marginalità.
 
 **Task da sviluppare:**
+
 - Prompt operativo: legge brief + piano del Direttore, calcola stima costi e margini, genera preventivo con gap max 15%
 - Schema output JSON: `{ project_id, prezzo_min, prezzo_max, gap_pct, breakdown[{voce, agente, quantita, prezzo_unitario, prezzo_totale, opzionale}], note, conditions, valid_until }`
 - Vincolo: `(prezzo_max - prezzo_min) / prezzo_min <= 0.15`
@@ -334,6 +351,7 @@ Ruolo: stima prezzi, gestisce preventivi, fatture, marginalità.
 Ruolo: definisce strategia, posizionamento, tono di voce, canali, KPI.
 
 **Task da sviluppare:**
+
 - Prompt: legge brief + research, produce strategia consolidata
 - Schema output JSON in tabella `project_strategy_outputs`:
   - `project_id, brief_id, plan_id, decision_id`
@@ -355,6 +373,7 @@ Ruolo: definisce strategia, posizionamento, tono di voce, canali, KPI.
 Ruolo: analisi competitor, trend, mercato, pubblico.
 
 **Task da sviluppare:**
+
 - Definire trigger di chiamata: chiamato da Direttore Op o da Strategist quando flag `need_research: true`
 - Prompt operativo: brief target → ricerca strutturata
 - Decidere fonti:
@@ -372,6 +391,7 @@ Ruolo: analisi competitor, trend, mercato, pubblico.
 Ruolo: definisce concept creativo, coordina copy/design/video, mantiene coerenza.
 
 **Task da sviluppare:**
+
 - Prompt: legge strategia + research, produce concept e brief creativi per ciascun specialist
 - Schema output JSON: `{ project_id, concept_principale, alternative_concepts[], brief_copy, brief_design, brief_video, brief_audio, mood_keywords, must_haves, must_avoids }`
 - Workflow n8n
@@ -389,6 +409,7 @@ Ruolo: definisce concept creativo, coordina copy/design/video, mantiene coerenza
 Ruolo: scrive headline, copy social, script video, landing, email, claim.
 
 **Task da sviluppare:**
+
 - Prompt operativo per ciascun deliverable supportato
 - Schema output JSON: `{ project_id, deliverable_type, language, variants[{title, body, cta, length, tags}], rationale }`
 - Tipi di deliverable supportati in V1:
@@ -409,6 +430,7 @@ Ruolo: scrive headline, copy social, script video, landing, email, claim.
 Ruolo: produce direzione artistica + asset grafici statici (banner, post visual, presentazioni, cover).
 
 **Task da sviluppare:**
+
 - Prompt direzione artistica: definisce stile, palette, tipografia coerente al brand
 - Prompt generazione: produce prompt per modelli image (DALL-E, Midjourney via API, Flux, Stable Diffusion)
 - Schema output JSON: `{ project_id, art_direction:{moodboard_refs, palette, typography, style_keywords}, assets[{tipo, formato, prompt_usato, path_storage, varianti[]}] }`
@@ -427,6 +449,7 @@ Ruolo: produce direzione artistica + asset grafici statici (banner, post visual,
 Ruolo unificato in V1: storyboard + montaggio + voiceover + motion base.
 
 **Task da sviluppare:**
+
 - Sotto-funzioni:
   - **Storyboard:** prompt → scaletta scene + descrizione visual + durata
   - **Generazione video:** integrazione con Runway/Sora/Pika/Veo via API per generazione clip
@@ -444,6 +467,7 @@ Ruolo unificato in V1: storyboard + montaggio + voiceover + motion base.
 Ruolo: pubblica/programma sui canali, gestisce ad campaigns, raccoglie KPI.
 
 **Task da sviluppare:**
+
 - Sotto-funzioni:
   - **Publishing:** integrazione Meta Graph API, LinkedIn API, TikTok Business API, X API, Buffer/Hootsuite come fallback
   - **Calendario editoriale:** generazione automatica con date ottimali per pubblico
@@ -654,22 +678,27 @@ Sezione dedicata al monitoraggio del consumo (vedi 1.2 per architettura sottosta
 Una volta consolidata la V1, aggiungere progressivamente questi agenti, secondo l'ordine di priorità di business:
 
 ## Direzione e coordinamento
+
 - **Project Manager** dedicato (oggi assorbito dal Direttore Operativo): milestone, scadenze, blocchi, report
 
 ## Area commerciale
+
 - **Sales / Business Development Agent**: lead qualification, proposte commerciali, follow-up
 - **Customer Success Agent**: monitoraggio soddisfazione, upsell, rinnovi
 
 ## Area amministrativa
+
 - **Controllo di Gestione Agent**: marginalità, alert sforamenti, analisi economica avanzata
 - **Legal/Compliance Agent**: privacy, licenze immagini/audio, claim pubblicitari, alert normativi
 
 ## Area editoriale (split del Copy)
+
 - **Editor / Content Editor**: corregge tono, semplifica, uniforma stile, verifica errori
 - **Social Media Content Agent**: piano editoriale, format social, calendario, caption/hashtag/CTA
 - **SEO Content Agent**: keyword research, struttura articoli, ottimizzazione, cluster editoriali
 
 ## Area visual e multimediale (split del Art&Design e Video/Audio)
+
 - **Art Director**: stile visivo, look and feel, allineamento brand
 - **Graphic Designer Agent**: produzione asset statici (banner, post, slide, cover)
 - **Image Generation Agent**: generazione AI dedicata, varianti, prompt riusabili
@@ -679,12 +708,14 @@ Una volta consolidata la V1, aggiungere progressivamente questi agenti, secondo 
 - **Motion Designer Agent**: animazioni, titolazioni, motion graphics, visual dinamici
 
 ## Area media e performance
+
 - **Media Planner / Advertising Agent** dedicato: setup campagne, segmenti, ad set, ottimizzazioni
 - **Publishing Agent** standalone: CMS, social scheduling, metadata
 - **Community / Engagement Agent**: risposta commenti, FAQ, smistamento messaggi, alert crisi
 - **Analytics Agent** standalone: KPI, dashboard performance, raccomandazioni
 
 ## Area qualità e supporto interno
+
 - **QA / Quality Assurance Agent**: errori, coerenza brand, formati, completezza asset
 - **Knowledge Manager Agent**: SOP, brand book, template, best practice, casi studio
 - **Prompt / Workflow Designer Agent**: ottimizzazione prompt e flussi degli altri agenti, miglioramento continuo
@@ -751,4 +782,4 @@ Da raccogliere in parallelo allo Sprint 0, prima del go-live di ogni fase:
 
 ---
 
-*Fine roadmap V1. Documento vivo: aggiornare a ogni decisione presa o cambio di scope.*
+_Fine roadmap V1. Documento vivo: aggiornare a ogni decisione presa o cambio di scope._

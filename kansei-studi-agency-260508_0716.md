@@ -15,18 +15,17 @@ TO DO
 - Rafforzare il nodo di routing.
 
 - Gestire tutti i possibili rami:
+  - Account Manager;
 
-    - Account Manager;
+  - Finance/Admin;
 
-    - Finance/Admin;
+  - Strategia;
 
-    - Strategia;
+  - Research;
 
-    - Research;
+  - Creative Lead;
 
-    - Creative Lead;
-
-    - Publishing/Performance.
+  - Publishing/Performance.
 
 - Aggiungere logging più completo.
 
@@ -37,18 +36,17 @@ TO DO
 - Collegare il Direttore Operativo alla dashboard Next.js.
 
 - Creare una vista dove tu puoi vedere:
+  - progetto;
 
-    - progetto;
+  - brief;
 
-    - brief;
+  - analisi;
 
-    - analisi;
+  - agenti richiesti;
 
-    - agenti richiesti;
+  - decisione proposta;
 
-    - decisione proposta;
-
-    - stato di avanzamento.
+  - stato di avanzamento.
 
 **Cosa fa**
 
@@ -128,26 +126,24 @@ TODO
 - Stabilire il formato JSON standard dell’output.
 
 - Salvare nel database:
+  - messaggio cliente;
 
-    - messaggio cliente;
+  - motivazione della richiesta;
 
-    - motivazione della richiesta;
+  - informazioni mancanti;
 
-    - informazioni mancanti;
-
-    - stato della richiesta.
+  - stato della richiesta.
 
 - Collegare Account Manager al sistema di approvazione.
 
 - Creare nella dashboard una sezione per:
+  - messaggi pronti per il cliente;
 
-    - messaggi pronti per il cliente;
+  - richieste di chiarimento;
 
-    - richieste di chiarimento;
+  - note interne;
 
-    - note interne;
-
-    - stato risposta cliente.
+  - stato risposta cliente.
 
 **Cosa fa**
 
@@ -314,19 +310,18 @@ Area amministrativa e finanziaria
 need_finance_admin
 ```
 
--  Creare eventuale tabella dedicata oppure salvare gli output in una tabella generica di agent outputs. 
+- Creare eventuale tabella dedicata oppure salvare gli output in una tabella generica di agent outputs.
 
--  Gestire casi come: 
+- Gestire casi come:
+  - budget assente;
 
-    -  budget assente; 
+  - budget troppo basso;
 
-    -  budget troppo basso; 
+  - richiesta fuori scala;
 
-    -  richiesta fuori scala; 
+  - necessità di preventivo;
 
-    -  necessità di preventivo; 
-
-    -  dati cliente incompleti.
+  - dati cliente incompleti.
 
 **Cosa fa**
 
@@ -375,44 +370,42 @@ Area strategica
 - Completare la tabella `project_strategy_outputs`.
 
 - Stabilire definitivamente i campi:
+  - project_id;
 
-    - project_id;
+  - brief_id;
 
-    - brief_id;
+  - plan_id;
 
-    - plan_id;
+  - decision_id;
 
-    - decision_id;
+  - strategy_summary;
 
-    - strategy_summary;
+  - target_analysis;
 
-    - target_analysis;
+  - positioning;
 
-    - positioning;
+  - tone_of_voice;
 
-    - tone_of_voice;
+  - campaign_angle;
 
-    - campaign_angle;
+  - recommended_channels;
 
-    - recommended_channels;
+  - risks;
 
-    - risks;
+  - missing_information;
 
-    - missing_information;
+  - status;
 
-    - status;
-
-    - version.
+  - version.
 
 - Collegare l’output alla dashboard.
 
 - Fare in modo che, dopo la strategia, il progetto possa passare a:
+  - Research Agent;
 
-    - Research Agent;
+  - Creative Lead;
 
-    - Creative Lead;
-
-    - approvazione umana.
+  - approvazione umana.
 
 - Gestire gli errori di parsing JSON.
 
@@ -488,13 +481,12 @@ Area strategica
 project_research_outputs
 ```
 
--  Collegarlo a: 
+- Collegarlo a:
+  - Direttore Operativo;
 
-    -  Direttore Operativo; 
+  - Brand/Marketing Strategist;
 
-    -  Brand/Marketing Strategist; 
-
-    -  Creative Lead.
+  - Creative Lead.
 
 ## Creative Director
 
@@ -536,17 +528,16 @@ Area creativa editoriale
 project_creative_outputs
 ```
 
--  Collegarlo al Direttore Operativo. 
+- Collegarlo al Direttore Operativo.
 
--  Collegarlo agli agenti: 
+- Collegarlo agli agenti:
+  - Copy;
 
-    -  Copy; 
+  - Art & Design;
 
-    -  Art & Design; 
+  - Video/Audio.
 
-    -  Video/Audio. 
-
--  Stabilire quando serve approvazione umana sul concept creativo.
+- Stabilire quando serve approvazione umana sul concept creativo.
 
 ## Copywriter
 
@@ -583,18 +574,17 @@ Area creativa editoriale
 - Definire output JSON.
 
 - Definire tipi di deliverable supportati:
+  - post social;
 
-    - post social;
+  - landing;
 
-    - landing;
+  - script video;
 
-    - script video;
+  - adv;
 
-    - adv;
+  - newsletter;
 
-    - newsletter;
-
-    - brochure.
+  - brochure.
 
 - Collegarlo al Creative Lead.
 
@@ -816,23 +806,23 @@ Per la prima versione avevamo compattato tutto in 10 figure operative.
 
 ### V1
 
- 1. Direttore Operativo
+1.  Direttore Operativo
 
- 2. Account Manager
+2.  Account Manager
 
- 3. Finance/Admin Agent
+3.  Finance/Admin Agent
 
- 4. Brand/Marketing Strategist
+4.  Brand/Marketing Strategist
 
- 5. Research Agent
+5.  Research Agent
 
- 6. Creative Lead
+6.  Creative Lead
 
- 7. Copy Agent
+7.  Copy Agent
 
- 8. Art & Design Agent
+8.  Art & Design Agent
 
- 9. Video/Audio Agent
+9.  Video/Audio Agent
 
 10. Publishing & Performance Agent
 

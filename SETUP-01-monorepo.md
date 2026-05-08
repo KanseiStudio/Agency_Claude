@@ -102,7 +102,7 @@ Consigliato: **Visual Studio Code** con queste estensioni installate:
 
 ## Stato attuale della cartella
 
-Sei già nella cartella di progetto a `C:\Users\miche\Documents\Claude\Projects\Kansei Studio Agency`. Al momento contiene:
+Sei già nella cartella di progetto a `C:\Users\miche\Kansei Studio Agency`. Al momento contiene:
 
 - `ROADMAP.md` — la roadmap completa
 - `SETUP-01-monorepo.md` — questa guida
@@ -159,6 +159,7 @@ git commit -m "chore: monorepo scaffolding (turbo + pnpm workspaces + shared pac
 ```
 
 > Se Git ti chiede di configurare nome ed email, lancia:
+>
 > ```bash
 > git config --global user.name "Michele Facecchia"
 > git config --global user.email "facecchia@kansei-studio.art"
@@ -308,11 +309,13 @@ Risultato: la cartella `apps/admin` viene creata con la struttura Next.js standa
 Per integrarlo bene nel monorepo, apri `apps/admin/package.json` e fai due modifiche.
 
 1. Cambia il nome del pacchetto in `@kansei/admin`:
+
    ```json
    "name": "@kansei/admin",
    ```
 
 2. Aggiungi la dipendenza al pacchetto condiviso (sezione `dependencies`):
+
    ```json
    "@kansei/shared": "workspace:*",
    ```
@@ -431,12 +434,11 @@ export default function Home() {
     <main className="flex min-h-screen flex-col items-center justify-center p-24">
       <h1 className="text-4xl font-bold">Kansei-Studio · Admin</h1>
       <p className="mt-4 text-lg">
-        Locale: <strong>{locale}</strong> · Stato di esempio:{' '}
-        <strong>{status}</strong>
+        Locale: <strong>{locale}</strong> · Stato di esempio: <strong>{status}</strong>
       </p>
       <p className="mt-2 text-sm text-gray-500">
-        Se vedi questa pagina e i tipi sopra non causano errori, il monorepo è
-        cablato correttamente.
+        Se vedi questa pagina e i tipi sopra non causano errori, il monorepo è cablato
+        correttamente.
       </p>
     </main>
   );
@@ -538,18 +540,18 @@ kansei-studio-agency/
 
 ## Comandi utili che userai spesso
 
-| Comando | Cosa fa |
-|---------|---------|
-| `pnpm dev` | Avvia tutte le app in dev mode (admin :3000, client :3001) |
-| `pnpm build` | Build di produzione di tutte le app |
-| `pnpm type-check` | Type-check su tutto il monorepo |
-| `pnpm format` | Formatta tutto il codice con Prettier |
-| `pnpm format:check` | Verifica solo il formato senza modificare |
-| `pnpm --filter @kansei/admin dev` | Avvia solo l'app admin |
-| `pnpm --filter @kansei/client dev` | Avvia solo l'app client |
-| `pnpm --filter @kansei/shared type-check` | Type-check solo del pacchetto shared |
-| `pnpm install` | Reinstalla/aggiorna le dipendenze |
-| `pnpm clean` | Pulisce le cartelle dist/.turbo/.next |
+| Comando                                   | Cosa fa                                                    |
+| ----------------------------------------- | ---------------------------------------------------------- |
+| `pnpm dev`                                | Avvia tutte le app in dev mode (admin :3000, client :3001) |
+| `pnpm build`                              | Build di produzione di tutte le app                        |
+| `pnpm type-check`                         | Type-check su tutto il monorepo                            |
+| `pnpm format`                             | Formatta tutto il codice con Prettier                      |
+| `pnpm format:check`                       | Verifica solo il formato senza modificare                  |
+| `pnpm --filter @kansei/admin dev`         | Avvia solo l'app admin                                     |
+| `pnpm --filter @kansei/client dev`        | Avvia solo l'app client                                    |
+| `pnpm --filter @kansei/shared type-check` | Type-check solo del pacchetto shared                       |
+| `pnpm install`                            | Reinstalla/aggiorna le dipendenze                          |
+| `pnpm clean`                              | Pulisce le cartelle dist/.turbo/.next                      |
 
 ---
 
@@ -570,13 +572,18 @@ Manca la dipendenza `"@kansei/shared": "workspace:*"` nel `package.json` dell'ap
 **Turbo non parte: "command not found"**
 Esegui di nuovo `pnpm install` al root. Turbo viene installato come devDependency del root.
 
+**`error TS2688: Cannot find type definition file for 'node'`**
+Il `tsconfig.json` di un pacchetto richiede esplicitamente `@types/node` ma non è installato. Soluzione corretta: **non** dichiarare `"types": ["node"]` in pacchetti come `shared` che devono restare isomorfici (utilizzabili sia server-side che browser-side). I tipi Node vanno usati solo in pacchetti server-only, dove vanno installati con `pnpm add -D @types/node`.
+
 **Ho fatto casino, voglio ripartire**
 Dal root:
+
 ```bash
 pnpm clean
 rm -rf node_modules apps/*/node_modules packages/*/node_modules
 pnpm install
 ```
+
 (Su Windows PowerShell sostituisci `rm -rf` con `Remove-Item -Recurse -Force`.)
 
 ---
