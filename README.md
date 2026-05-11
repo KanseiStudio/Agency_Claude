@@ -15,6 +15,7 @@ Agenzia di comunicazione virtuale AI-driven.
 - [`SETUP-06-direttore-operativo.md`](./SETUP-06-direttore-operativo.md) — Step 6: framework agenti + Direttore Operativo (primo agente AI).
 - [`SETUP-07-finance-admin.md`](./SETUP-07-finance-admin.md) — Step 7: Finance/Admin agent + flusso preventivo cliente.
 - [`SETUP-08-creative-lead.md`](./SETUP-08-creative-lead.md) — Step 8: Creative Lead (concept + brief operativi).
+- [`SETUP-09-copy-agent.md`](./SETUP-09-copy-agent.md) — Step 9: Copy Agent (testi con varianti A/B/C).
 
 ## Struttura del repository
 

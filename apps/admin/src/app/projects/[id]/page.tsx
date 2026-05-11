@@ -1,11 +1,17 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { prisma } from '@kansei/database';
-import { direttoreOutputSchema, type DirettoreOutput } from '@kansei/agents';
+import {
+  direttoreOutputSchema,
+  copyAgentOutputSchema,
+  type DirettoreOutput,
+  type CopyAgentOutput,
+} from '@kansei/agents';
 import { ApprovalButtons } from './approval-buttons';
 import { DirettoreButton } from './direttore-button';
 import { GenerateQuoteButton, SendQuoteButton } from './finance-buttons';
 import { CreativeLeadButton } from './creative-button';
+import { CopyAgentButton } from './copy-button';
 
 export default async function AdminProjectDetailPage({
   params,
@@ -72,6 +78,15 @@ export default async function AdminProjectDetailPage({
   // Visibilità sezione Creative: dopo che il cliente ha accettato il preventivo
   const isInProduction =
     project.stato === 'preventivo_accettato' || project.stato === 'in_produzione';
+
+  // Copy Agent output (più recente)
+  const copyRaw = await prisma.agentOutput.findFirst({
+    where: { projectId: project.id, agente: 'copy-agent', status: 'success' },
+    orderBy: { createdAt: 'desc' },
+  });
+  const copyParsed = copyRaw ? copyAgentOutputSchema.safeParse(copyRaw.payload) : null;
+  const copyOutput: CopyAgentOutput | null =
+    copyParsed && copyParsed.success ? copyParsed.data : null;
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-12 font-sans">
@@ -487,6 +502,91 @@ export default async function AdminProjectDetailPage({
                 <CreativeLeadButton projectId={project.id} />
                 <span className="text-xs text-zinc-500">
                   Cliccando rigeneri il concept (utile dopo modifiche al brief).
+                </span>
+              </div>
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {/* Copy Agent */}
+      {creativeOutput ? (
+        <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+              Copy Agent
+            </h2>
+            {copyOutput ? (
+              <p className="text-xs text-zinc-500">{copyOutput.deliverables.length} deliverable</p>
+            ) : null}
+          </div>
+
+          {!copyOutput ? (
+            <div className="mt-3">
+              <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">
+                Il Creative Lead ha definito concept e brief copy. Esegui il Copy Agent per generare
+                i testi (post social, newsletter, landing, comunicati, claim).
+              </p>
+              <CopyAgentButton projectId={project.id} />
+            </div>
+          ) : (
+            <div className="mt-3 space-y-5">
+              {copyOutput.deliverables.map((d, di) => (
+                <div
+                  key={di}
+                  className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800"
+                >
+                  <div className="flex items-baseline justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                      {d.title}
+                    </h3>
+                    <span className="rounded-full bg-indigo-100 px-2 py-0.5 font-mono text-[10px] uppercase text-indigo-800 dark:bg-indigo-900 dark:text-indigo-100">
+                      {d.type}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs italic text-zinc-500">{d.rationale}</p>
+
+                  <div className="mt-3 space-y-2">
+                    {d.variants.map((v) => (
+                      <details key={v.label} className="rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900">
+                        <summary className="cursor-pointer text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                          Variante {v.label}
+                          {v.headline ? ` — ${v.headline}` : ''}
+                          <span className="ml-2 font-mono text-[10px] font-normal text-zinc-500">
+                            {v.length_chars} char
+                          </span>
+                        </summary>
+                        <div className="mt-3 space-y-2 text-sm text-zinc-800 dark:text-zinc-200">
+                          {v.headline ? <p className="font-semibold">{v.headline}</p> : null}
+                          <p className="whitespace-pre-line">{v.body}</p>
+                          {v.cta ? (
+                            <p className="text-xs">
+                              <span className="font-semibold uppercase text-zinc-500">CTA:</span>{' '}
+                              {v.cta}
+                            </p>
+                          ) : null}
+                          {v.hashtags && v.hashtags.length > 0 ? (
+                            <p className="font-mono text-xs text-zinc-500">
+                              {v.hashtags.join(' ')}
+                            </p>
+                          ) : null}
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                </div>
+              ))}
+
+              {copyOutput.global_notes ? (
+                <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs italic text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
+                  {copyOutput.global_notes}
+                </p>
+              ) : null}
+
+              <div className="flex items-center gap-3 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+                <CopyAgentButton projectId={project.id} />
+                <span className="text-xs text-zinc-500">
+                  Click per rigenerare (utile per esplorare angoli diversi).
                 </span>
               </div>
             </div>

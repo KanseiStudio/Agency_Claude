@@ -41,11 +41,28 @@ export {
 export type { CreativeLeadInput, CreativeLeadOutput } from './agents/creative-lead';
 export { buildMockCreativeLeadResponse } from './agents/creative-lead/mock';
 
+// Agente: Copy Agent
+export {
+  copyAgentAgent,
+  copyAgentInputSchema,
+  copyAgentOutputSchema,
+  copyDeliverableTypeEnum,
+} from './agents/copy-agent';
+export type {
+  CopyAgentInput,
+  CopyAgentOutput,
+  CopyVariant,
+  CopyDeliverable,
+  CopyDeliverableType,
+} from './agents/copy-agent';
+export { buildMockCopyAgentResponse } from './agents/copy-agent/mock';
+
 // Configurazione mock di default per V1: registriamo le risposte mock note.
 import { setMockResponseProvider } from './runtime/llm/mock';
 import { buildMockDirettoreResponse } from './agents/direttore-operativo/mock';
 import { buildMockFinanceAdminResponse } from './agents/finance-admin/mock';
 import { buildMockCreativeLeadResponse } from './agents/creative-lead/mock';
+import { buildMockCopyAgentResponse } from './agents/copy-agent/mock';
 
 setMockResponseProvider(({ agentName, userMessage }) => {
   switch (agentName) {
@@ -55,6 +72,8 @@ setMockResponseProvider(({ agentName, userMessage }) => {
       return buildMockFinanceAdminResponse(userMessage);
     case 'creative-lead':
       return buildMockCreativeLeadResponse(userMessage);
+    case 'copy-agent':
+      return buildMockCopyAgentResponse(userMessage);
     default:
       throw new Error(`Nessuna risposta mock registrata per agente "${agentName}"`);
   }

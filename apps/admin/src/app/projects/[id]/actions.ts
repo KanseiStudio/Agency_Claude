@@ -12,6 +12,7 @@ import {
   direttoreOperativoAgent,
   financeAdminAgent,
   creativeLeadAgent,
+  copyAgentAgent,
   direttoreOutputSchema,
   type FinanceAdminOutput,
 } from '@kansei/agents';
@@ -361,6 +362,77 @@ export async function runCreativeLeadAction(
 
   revalidatePath(`/projects/${projectId}`);
   revalidatePath('/projects');
+  return { ok: true };
+}
+
+/**
+ * Esegue il Copy Agent. Richiede Creative Lead già eseguito (legge concept + brief copy).
+ * Salva l'output in agent_outputs.
+ */
+export async function runCopyAgentAction(
+  projectId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: {
+      client: { select: { ragioneSociale: true } },
+      briefs: { orderBy: { createdAt: 'desc' }, take: 1 },
+    },
+  });
+  if (!project) return { ok: false, error: 'Progetto non trovato.' };
+  const brief = project.briefs[0];
+  if (!brief) return { ok: false, error: 'Brief mancante.' };
+
+  const creative = await prisma.projectCreativeOutput.findFirst({
+    where: { projectId },
+    orderBy: { version: 'desc' },
+  });
+  if (!creative) {
+    return { ok: false, error: 'Esegui prima il Creative Lead.' };
+  }
+
+  try {
+    await runAgent(
+      copyAgentAgent,
+      {
+        projectId: project.id,
+        codiceProgetto: project.codiceProgetto,
+        titolo: project.titolo,
+        descrizione: brief.descrizione,
+        deliverableRichiesti: Array.isArray(brief.deliverableRichiesti)
+          ? (brief.deliverableRichiesti as string[])
+          : [],
+        clientName: project.client.ragioneSociale,
+        conceptPrincipale: creative.conceptPrincipale ?? '',
+        briefCopy: creative.briefCopy ?? '',
+        moodKeywords: Array.isArray(creative.moodKeywords)
+          ? (creative.moodKeywords as string[])
+          : [],
+        mustHaves: Array.isArray(creative.mustHaves) ? (creative.mustHaves as string[]) : [],
+        mustAvoids: Array.isArray(creative.mustAvoids) ? (creative.mustAvoids as string[]) : [],
+        language: project.language as 'it' | 'en',
+      },
+      { projectId: project.id },
+    );
+
+    await prisma.event.create({
+      data: { projectId, tipo: 'agent.copy_agent.success' },
+    });
+  } catch (e) {
+    const message = (e as Error).message;
+    await prisma.event.create({
+      data: {
+        projectId,
+        tipo: 'agent.copy_agent.failed',
+        payload: { error: message },
+      },
+    });
+    return { ok: false, error: `Copy Agent fallito: ${message}` };
+  }
+
+  revalidatePath(`/projects/${projectId}`);
   return { ok: true };
 }
 
