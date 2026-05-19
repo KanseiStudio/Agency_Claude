@@ -121,6 +121,7 @@ model Project {
   costAlerts              CostAlert[]
   deliverables            Deliverable[]
   invoices                Invoice[]
+  emailMessages           EmailMessage[]
   approvals               Approval[]
   blocks                  ClientBlock[]
   events                  Event[]
@@ -738,19 +739,75 @@ model Invoice {
 }
 
 model Payment {
-  id            String        @id @default(cuid())
-  invoiceId     String        @map("invoice_id")
-  invoice       Invoice       @relation(fields: [invoiceId], references: [id])
-  importoCents  Int           @map("importo_cents")
-  metodo        PaymentMethod
-  transactionId String?       @unique @map("transaction_id")
-  status        PaymentStatus @default(pending)
-  metadata      Json?
-  createdAt     DateTime      @default(now()) @map("created_at")
-  updatedAt     DateTime      @updatedAt @map("updated_at")
+  id                    String        @id @default(cuid())
+  invoiceId             String        @map("invoice_id")
+  invoice               Invoice       @relation(fields: [invoiceId], references: [id])
+  importoCents          Int           @map("importo_cents")
+  metodo                PaymentMethod
+  transactionId         String?       @unique @map("transaction_id")
+  /// Stripe Checkout Session ID (cs_test_... o cs_live_...). Popolato quando
+  /// si crea la session, usato per recuperare il payment nel webhook.
+  stripeSessionId       String?       @unique @map("stripe_session_id")
+  /// Stripe PaymentIntent ID (pi_...). Popolato dopo che il webhook
+  /// payment_intent.succeeded conferma il pagamento.
+  stripePaymentIntentId String?       @unique @map("stripe_payment_intent_id")
+  status                PaymentStatus @default(pending)
+  metadata              Json?
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
 
   @@index([invoiceId])
   @@map("payments")
+}
+
+// ============================================================================
+//   EMAIL TRANSAZIONALI (Email Composer Agent)
+// ============================================================================
+
+enum EmailKind {
+  quote_sent
+  quote_reminder
+  production_started
+  deliverables_ready
+  revision_completed
+  invoice_issued
+  payment_confirmed
+  payment_reminder
+  project_completed
+  custom
+}
+
+enum EmailStatus {
+  queued
+  sent
+  failed
+}
+
+model EmailMessage {
+  id           String      @id @default(cuid())
+  projectId    String?     @map("project_id")
+  project      Project?    @relation(fields: [projectId], references: [id])
+  kind         EmailKind
+  toAddress    String      @map("to_address")
+  fromAddress  String      @map("from_address")
+  subject      String      @db.VarChar(500)
+  bodyHtml     String      @db.LongText @map("body_html")
+  bodyText     String      @db.LongText @map("body_text")
+  status       EmailStatus @default(queued)
+  /// SMTP message-id (Message-ID header) restituito dal server SMTP a invio riuscito.
+  smtpMessageId String?    @map("smtp_message_id")
+  /// Errore SMTP se status = failed.
+  errorMessage String?     @db.Text @map("error_message")
+  /// Run dell'agente che ha composto il body (se applicabile).
+  runId        String?     @map("run_id")
+  sentAt       DateTime?   @map("sent_at")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  @@index([projectId])
+  @@index([kind, createdAt])
+  @@index([status])
+  @@map("email_messages")
 }
 
 // ============================================================================

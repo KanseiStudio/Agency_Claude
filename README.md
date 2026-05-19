@@ -16,6 +16,12 @@ Agenzia di comunicazione virtuale AI-driven.
 - [`SETUP-07-finance-admin.md`](./SETUP-07-finance-admin.md) — Step 7: Finance/Admin agent + flusso preventivo cliente.
 - [`SETUP-08-creative-lead.md`](./SETUP-08-creative-lead.md) — Step 8: Creative Lead (concept + brief operativi).
 - [`SETUP-09-copy-agent.md`](./SETUP-09-copy-agent.md) — Step 9: Copy Agent (testi con varianti A/B/C).
+- [`SETUP-10-art-design.md`](./SETUP-10-art-design.md) — Step 10: Art & Design Agent (art direction + generazione immagini).
+- [`SETUP-11-deliverables-revisioni.md`](./SETUP-11-deliverables-revisioni.md) — Step 11: vista cliente deliverable + flusso revisioni.
+- [`SETUP-12-pagamento-download.md`](./SETUP-12-pagamento-download.md) — Step 12: workflow revisioni admin + pagamento (mock) + download gating.
+- [`SETUP-13-higgsfield.md`](./SETUP-13-higgsfield.md) — Step 13: Higgsfield — image + video generation reali (cloud diretto o Segmind proxy).
+- [`SETUP-14-stripe.md`](./SETUP-14-stripe.md) — Step 14: Stripe Checkout reale (test mode + webhook + redirect).
+- [`SETUP-15-email-composer.md`](./SETUP-15-email-composer.md) — Step 15: Email Composer Agent + invio SMTP via nodemailer.
 
 ## Struttura del repository
 

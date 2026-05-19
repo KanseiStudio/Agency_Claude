@@ -12,6 +12,7 @@
 //   - log strutturato in `agent_logs`
 
 import { prisma, Prisma } from '@kansei/database';
+import type { ZodIssue } from 'zod';
 import type {
   AgentDefinition,
   AgentInput,
@@ -58,24 +59,61 @@ export async function runAgent<A extends AgentDefinition<any, any>>(
 
   try {
     const systemPrompt = agent.buildSystemPrompt(validatedInput);
-    const userMessage = agent.buildUserMessage(validatedInput);
+    const baseUserMessage = agent.buildUserMessage(validatedInput);
 
-    const llmResponse = await callLLM({
-      agentName: agent.name,
-      provider: agent.provider,
-      systemPrompt,
-      userMessage,
-      modelLogical: agent.model,
-    });
+    // Loop di retry su validazione output: tentiamo fino a 2 volte.
+    // Se il primo output non aderisce allo schema, rimandiamo gli errori
+    // di validazione all'LLM con un messaggio correttivo e gli diamo
+    // un'altra chance prima di fallire.
+    const MAX_ATTEMPTS = 2;
+    let llmResponse: Awaited<ReturnType<typeof callLLM>> | null = null;
+    let parsedJson: unknown = null;
+    let parsedOutput: ReturnType<typeof agent.outputSchema.safeParse> | null = null;
+    let lastUserMessage = baseUserMessage;
 
-    // Parse JSON output
-    const parsedJson = parseJsonStrict(llmResponse.content);
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      llmResponse = await callLLM({
+        agentName: agent.name,
+        provider: agent.provider,
+        systemPrompt,
+        userMessage: lastUserMessage,
+        modelLogical: agent.model,
+      });
 
-    const parsedOutput = agent.outputSchema.safeParse(parsedJson);
-    if (!parsedOutput.success) {
-      throw new Error(
-        `Output non aderente allo schema: ${JSON.stringify(parsedOutput.error.issues)}`,
-      );
+      try {
+        parsedJson = parseJsonStrict(llmResponse.content);
+      } catch (parseErr) {
+        if (attempt === MAX_ATTEMPTS) {
+          throw new Error(
+            `Output JSON non parsabile dopo ${MAX_ATTEMPTS} tentativi: ${(parseErr as Error).message}`,
+          );
+        }
+        lastUserMessage =
+          baseUserMessage +
+          `\n\n---\nIl tuo precedente output NON era JSON valido (parse error: ${(parseErr as Error).message}). Rigenera SOLO un JSON valido, niente markdown né code fence, niente testo extra.`;
+        continue;
+      }
+
+      parsedOutput = agent.outputSchema.safeParse(parsedJson);
+      if (parsedOutput.success) break;
+
+      if (attempt === MAX_ATTEMPTS) {
+        throw new Error(
+          `Output non aderente allo schema: ${JSON.stringify(parsedOutput.error.issues)}`,
+        );
+      }
+
+      const issuesText = (parsedOutput.error.issues as ZodIssue[])
+        .map((iss: ZodIssue) => `  - path ${iss.path.join('.')}: ${iss.message}`)
+        .join('\n');
+      lastUserMessage =
+        baseUserMessage +
+        `\n\n---\nIl tuo precedente output NON ha superato la validazione dello schema. Errori:\n${issuesText}\n\nRigenera l'INTERO JSON corretto, includendo TUTTI i campi richiesti per OGNI elemento degli array. Non omettere nulla.`;
+    }
+
+    if (!llmResponse || !parsedOutput || !parsedOutput.success) {
+      // Difensivo: non dovrebbe accadere visto che usciamo sopra.
+      throw new Error('Output non valido dopo i retry');
     }
     const output = parsedOutput.data as AgentOutput<A>;
 
