@@ -23,6 +23,7 @@ import {
   getModelById,
   type FinanceAdminOutput,
   type ArtDesignOutput,
+  type DirettoreOutput,
   type GeneratedAsset,
   type GeneratedKeyframe,
   type EmailKind,
@@ -89,7 +90,15 @@ export async function runDirettoreOperativoAction(
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     include: {
-      client: { select: { ragioneSociale: true } },
+      // Carichiamo anche email + p.iva del cliente: il Direttore le usa per
+      // inferire settore e profilo (es. dominio email professionale → studio).
+      client: {
+        select: {
+          ragioneSociale: true,
+          emailFatturazione: true,
+          pIva: true,
+        },
+      },
       briefs: { orderBy: { createdAt: 'desc' }, take: 1 },
     },
   });
@@ -98,23 +107,43 @@ export async function runDirettoreOperativoAction(
   if (!brief) return { ok: false, error: 'Brief non trovato per questo progetto.' };
 
   try {
-    await runAgent(
+    const deliverables = Array.isArray(brief.deliverableRichiesti)
+      ? (brief.deliverableRichiesti as string[])
+      : [];
+
+    const runResult = await runAgent(
       direttoreOperativoAgent,
       {
         projectId: project.id,
         codiceProgetto: project.codiceProgetto,
         titolo: project.titolo,
         descrizione: brief.descrizione,
-        deliverableRichiesti: Array.isArray(brief.deliverableRichiesti)
-          ? (brief.deliverableRichiesti as string[])
-          : [],
+        deliverableRichiesti: deliverables,
         deadline: brief.deadline ? brief.deadline.toISOString().slice(0, 10) : null,
         budgetIndicativoEur: brief.budgetIndicativoCents ? brief.budgetIndicativoCents / 100 : null,
         clientName: project.client.ragioneSociale,
+        clientEmail: project.client.emailFatturazione,
+        clientPiva: project.client.pIva ?? undefined,
         language: project.language as 'it' | 'en',
       },
       { projectId: project.id },
     );
+
+    // -------------------------------------------------------------------
+    // SAFETY NET — domande critiche che NON possono mai mancare.
+    // Se l'LLM dimentica una domanda obbligatoria per un certo deliverable
+    // (es. "nome esatto da mettere sul logo"), la iniettiamo qui prima
+    // di salvare. È un override del payload appena salvato da runAgent.
+    // -------------------------------------------------------------------
+    const out = runResult.output as DirettoreOutput;
+    const injected = enforceMandatoryMissingInfo(out.missing_information, deliverables);
+    if (injected.length !== out.missing_information.length) {
+      const patched: DirettoreOutput = { ...out, missing_information: injected };
+      await prisma.agentOutput.updateMany({
+        where: { runId: runResult.runId, agente: 'direttore-operativo' },
+        data: { payload: patched as unknown as Prisma.InputJsonValue },
+      });
+    }
 
     await prisma.event.create({
       data: {
@@ -1357,6 +1386,59 @@ function slug(s: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 40);
+}
+
+/**
+ * Garantisce che missing_information contenga le domande critiche per il
+ * tipo di deliverable richiesto. Se l'LLM le ha dimenticate, le inietta
+ * in CIMA all'array (massima visibilità).
+ *
+ * Domande non skippabili:
+ * - Logo  → nome esatto da mettere sul logo (≠ ragione sociale!)
+ * - Video → canale + audio (voiceover/sottotitoli/musica)
+ *
+ * La detection è basata su keyword nel testo della domanda — euristica
+ * sufficiente per evitare doppioni quando l'LLM ha già fatto bene.
+ */
+function enforceMandatoryMissingInfo(
+  existing: string[],
+  deliverables: string[],
+): string[] {
+  const out = [...existing];
+  const lower = existing.map((q) => q.toLowerCase());
+
+  // Logo: nome esatto
+  if (deliverables.includes('logo')) {
+    const hasNameQuestion = lower.some(
+      (q) =>
+        (q.includes('nome') &&
+          (q.includes('logo') || q.includes('apparire') || q.includes('mettere'))) ||
+        q.includes('wordmark'),
+    );
+    if (!hasNameQuestion) {
+      out.unshift(
+        'Qual è il NOME ESATTO che deve apparire sul logo? Includi maiuscole/minuscole/punteggiatura come vorresti scritto (es. "BUONGUSTO", "Buongusto", "Trattoria da Mario"). Nota: il nome del logo può essere diverso dalla ragione sociale aziendale.',
+      );
+    }
+  }
+
+  // Video: canale di destinazione
+  if (deliverables.some((d) => /video|reel|spot|motion/i.test(d))) {
+    const hasChannelQuestion = lower.some(
+      (q) =>
+        q.includes('canale') ||
+        q.includes('tiktok') ||
+        q.includes('reel') ||
+        q.includes('youtube'),
+    );
+    if (!hasChannelQuestion) {
+      out.unshift(
+        'Su quale canale principale andrà il video (TikTok, IG Reel, YouTube, ad campaign)? Questo determina durata e aspect ratio richiesti.',
+      );
+    }
+  }
+
+  return out;
 }
 
 function pickExtension(mime: string): string {

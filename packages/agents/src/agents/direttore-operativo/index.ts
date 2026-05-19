@@ -1,7 +1,12 @@
 // Agent definition del Direttore Operativo.
 
 import type { AgentDefinition } from '../../runtime/types';
-import { direttoreInputSchema, direttoreOutputSchema } from './schema';
+import {
+  direttoreInputSchema,
+  direttoreOutputSchema,
+  clientAnalysisSchema,
+  visualMoodAnalysisSchema,
+} from './schema';
 import { buildSystemPrompt, buildUserMessage } from './prompt';
 
 export const direttoreOperativoAgent: AgentDefinition<
@@ -9,7 +14,7 @@ export const direttoreOperativoAgent: AgentDefinition<
   typeof direttoreOutputSchema
 > = {
   name: 'direttore-operativo',
-  promptVersion: '0.1.0',
+  promptVersion: '0.2.0',
   inputSchema: direttoreInputSchema,
   outputSchema: direttoreOutputSchema,
   provider: 'anthropic',
@@ -19,5 +24,15 @@ export const direttoreOperativoAgent: AgentDefinition<
   buildUserMessage,
 };
 
-export type { DirettoreInput, DirettoreOutput } from './schema';
-export { direttoreInputSchema, direttoreOutputSchema };
+export type {
+  DirettoreInput,
+  DirettoreOutput,
+  ClientAnalysis,
+  VisualMoodAnalysis,
+} from './schema';
+export {
+  direttoreInputSchema,
+  direttoreOutputSchema,
+  clientAnalysisSchema,
+  visualMoodAnalysisSchema,
+};

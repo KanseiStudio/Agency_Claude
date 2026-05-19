@@ -490,6 +490,105 @@ export default async function AdminProjectDetailPage({
                 <Detail label="Agenti coinvolti">{direttoreOutput.required_agents.length}</Detail>
               </dl>
 
+              {/* Analisi cliente — campo opzionale per retrocompatibilità */}
+              {direttoreOutput.client_analysis ? (
+                <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 dark:border-sky-900 dark:bg-sky-950/30">
+                  <div className="flex items-baseline justify-between">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">
+                      Analisi cliente
+                    </h3>
+                    <span className="rounded-full bg-sky-200 px-2 py-0.5 font-mono text-[10px] uppercase text-sky-900 dark:bg-sky-800 dark:text-sky-100">
+                      confidence: {direttoreOutput.client_analysis.information_confidence}
+                    </span>
+                  </div>
+                  <dl className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <Detail label="Settore">
+                      {direttoreOutput.client_analysis.sector_inferred}
+                    </Detail>
+                    <Detail label="Modello business">
+                      {direttoreOutput.client_analysis.business_model}
+                    </Detail>
+                    <Detail label="Target audience">
+                      {direttoreOutput.client_analysis.target_audience_hypothesis}
+                    </Detail>
+                    <Detail label="Posizionamento">
+                      {direttoreOutput.client_analysis.competitive_positioning}
+                    </Detail>
+                  </dl>
+                  <p className="mt-2 text-[11px] font-mono text-sky-700 dark:text-sky-300">
+                    Segnali usati:{' '}
+                    {direttoreOutput.client_analysis.inference_signals.join(' · ')}
+                  </p>
+                </div>
+              ) : null}
+
+              {/* Analisi mood visivo */}
+              {direttoreOutput.visual_mood_analysis ? (
+                <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-900 dark:bg-violet-950/30">
+                  <div className="flex items-baseline justify-between">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">
+                      Mood visivo inferito
+                    </h3>
+                    <span className="rounded-full bg-violet-200 px-2 py-0.5 font-mono text-[10px] uppercase text-violet-900 dark:bg-violet-800 dark:text-violet-100">
+                      {direttoreOutput.visual_mood_analysis.has_references
+                        ? 'reference forniti'
+                        : 'no reference · dedotto'}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs italic text-violet-800 dark:text-violet-200">
+                    {direttoreOutput.visual_mood_analysis.rationale}
+                  </p>
+                  <div className="mt-3">
+                    <p className="text-[10px] font-semibold uppercase text-violet-700 dark:text-violet-300">
+                      Style keywords
+                    </p>
+                    <ul className="mt-1 flex flex-wrap gap-1">
+                      {direttoreOutput.visual_mood_analysis.inferred_style_keywords.map(
+                        (k, i) => (
+                          <li
+                            key={i}
+                            className="rounded-full bg-violet-200 px-2 py-0.5 font-mono text-[10px] text-violet-900 dark:bg-violet-800 dark:text-violet-100"
+                          >
+                            {k}
+                          </li>
+                        ),
+                      )}
+                    </ul>
+                  </div>
+                  <div className="mt-3">
+                    <p className="text-[10px] font-semibold uppercase text-violet-700 dark:text-violet-300">
+                      Direzioni palette
+                    </p>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-violet-900 dark:text-violet-100">
+                      {direttoreOutput.visual_mood_analysis.suggested_color_directions.map(
+                        (c, i) => (
+                          <li key={i}>{c}</li>
+                        ),
+                      )}
+                    </ul>
+                  </div>
+                  <p className="mt-2 text-xs text-violet-900 dark:text-violet-100">
+                    <strong>Tipografia:</strong>{' '}
+                    {direttoreOutput.visual_mood_analysis.inferred_typography_style}
+                  </p>
+                </div>
+              ) : null}
+
+              {/* Assunzioni esplicite */}
+              {direttoreOutput.assumptions_made &&
+              direttoreOutput.assumptions_made.length > 0 ? (
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    Assunzioni fatte ({direttoreOutput.assumptions_made.length})
+                  </h3>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-zinc-700 dark:text-zinc-300">
+                    {direttoreOutput.assumptions_made.map((a, i) => (
+                      <li key={i}>{a}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
               <div>
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
                   Piano di esecuzione

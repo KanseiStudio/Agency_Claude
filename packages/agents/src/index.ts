@@ -34,8 +34,15 @@ export {
   direttoreOperativoAgent,
   direttoreInputSchema,
   direttoreOutputSchema,
+  clientAnalysisSchema,
+  visualMoodAnalysisSchema,
 } from './agents/direttore-operativo';
-export type { DirettoreInput, DirettoreOutput } from './agents/direttore-operativo';
+export type {
+  DirettoreInput,
+  DirettoreOutput,
+  ClientAnalysis,
+  VisualMoodAnalysis,
+} from './agents/direttore-operativo';
 export { buildMockDirettoreResponse } from './agents/direttore-operativo/mock';
 
 // Agente: Finance/Admin
