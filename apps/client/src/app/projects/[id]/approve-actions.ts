@@ -24,6 +24,7 @@
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
 import { prisma } from '@kansei/database';
+import { safelyTriggerEmail } from '@/lib/notifications';
 
 export async function approveAndProceedAction(
   projectId: string,
@@ -117,6 +118,11 @@ export async function approveAndProceedAction(
       },
     },
   });
+
+  // Auto-trigger email cliente: "fattura emessa, pagala dal portale"
+  // (notifica anche se è il cliente stesso ad approvare — utile come
+  // ricevuta scritta con i dettagli della fattura)
+  await safelyTriggerEmail({ projectId, kind: 'invoice_issued' });
 
   revalidatePath(`/projects/${projectId}`);
   return { ok: true, invoiceId: invoice.id };

@@ -27,6 +27,7 @@ import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
 import { prisma } from '@kansei/database';
 import { createCheckoutSession, isMockPayments } from '@/lib/stripe';
+import { safelyTriggerEmail } from '@/lib/notifications';
 
 export async function payProjectAction(
   projectId: string,
@@ -102,6 +103,10 @@ export async function payProjectAction(
         },
       });
     });
+
+    // Auto-trigger email cliente: "pagamento ricevuto" (anche nel path mock,
+    // così il flusso dev è simmetrico col path Stripe reale via webhook)
+    await safelyTriggerEmail({ projectId, kind: 'payment_confirmed' });
 
     revalidatePath(`/projects/${projectId}`);
     return { ok: true };

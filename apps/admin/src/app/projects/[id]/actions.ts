@@ -15,7 +15,6 @@ import {
   copyAgentAgent,
   artDesignAgent,
   projectManagerAgent,
-  emailComposerAgent,
   direttoreOutputSchema,
   copyAgentOutputSchema,
   artDesignOutputSchema,
@@ -27,9 +26,8 @@ import {
   type GeneratedAsset,
   type GeneratedKeyframe,
   type EmailKind,
-  type EmailComposerOutput,
 } from '@kansei/agents';
-import { sendEmail } from '@/lib/mailer';
+import { sendProjectEmail, safelyTriggerEmail } from '@/lib/notifications';
 import { z } from 'zod';
 import { getStorage } from '@kansei/storage';
 
@@ -160,6 +158,21 @@ export async function runFinanceAdminAction(
   if (!project) return { ok: false, error: 'Progetto non trovato.' };
   const brief = project.briefs[0];
   if (!brief) return { ok: false, error: 'Brief mancante.' };
+
+  // Blocco se c'è una clarification pending: il Direttore ha rilevato info
+  // mancanti, l'admin le ha mandate al cliente, il cliente non ha ancora
+  // risposto. Non possiamo procedere con un preventivo basato su un brief
+  // incompleto.
+  const pendingClarification = await prisma.clarificationRequest.findFirst({
+    where: { projectId, status: 'pending' },
+  });
+  if (pendingClarification) {
+    return {
+      ok: false,
+      error:
+        'Il progetto è in attesa di chiarimenti dal cliente. Aspetta che il cliente risponda alle domande prima di generare il preventivo.',
+    };
+  }
 
   // Output del Direttore (richiesto)
   const direttoreRaw = await prisma.agentOutput.findFirst({
@@ -950,6 +963,9 @@ export async function publishToClientAction(
       });
     });
 
+    // Auto-trigger email cliente: "deliverable pronti per la revisione"
+    await safelyTriggerEmail({ projectId, kind: 'deliverables_ready' });
+
     revalidatePath(`/projects/${projectId}`);
     revalidatePath('/projects');
     return { ok: true, count };
@@ -990,6 +1006,12 @@ export async function markRevisionRoundCompletedAction(
         payload: { roundNumber: round.numero, decidedBy: session.user.email },
       },
     });
+  });
+
+  // Auto-trigger email cliente: "round revisione chiuso, nuova versione online"
+  await safelyTriggerEmail({
+    projectId: round.projectId,
+    kind: 'revision_completed',
   });
 
   revalidatePath(`/projects/${round.projectId}`);
@@ -1050,8 +1072,102 @@ export async function createInvoiceAction(
     },
   });
 
+  // Auto-trigger email cliente: "fattura emessa, vai sul portale per pagare"
+  await safelyTriggerEmail({ projectId, kind: 'invoice_issued' });
+
   revalidatePath(`/projects/${projectId}`);
   return { ok: true, invoiceId: invoice.id };
+}
+
+/**
+ * Manda al cliente le domande di chiarimento individuate dal Direttore
+ * Operativo (campo `missing_information` dell'ultimo output).
+ *
+ * Effetti:
+ *   1. Crea ClarificationRequest con questions = missing_information
+ *   2. Cambia stato progetto a "attesa_chiarimenti"
+ *   3. Auto-trigger email "brief_clarification_needed" al cliente
+ *
+ * Vincoli:
+ *   - L'ultimo Direttore output deve avere missing_information non vuoto
+ *   - Non deve esistere già una ClarificationRequest pending
+ */
+export async function sendClarificationRequestAction(
+  projectId: string,
+): Promise<{ ok: true; questionsCount: number } | { ok: false; error: string }> {
+  await requireAdmin();
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: { briefs: { orderBy: { createdAt: 'desc' }, take: 1 } },
+  });
+  if (!project) return { ok: false, error: 'Progetto non trovato.' };
+  const brief = project.briefs[0];
+  if (!brief) return { ok: false, error: 'Brief mancante.' };
+
+  // Verifica niente clarification pending già aperto
+  const pending = await prisma.clarificationRequest.findFirst({
+    where: { projectId, status: 'pending' },
+  });
+  if (pending) {
+    return {
+      ok: false,
+      error: 'Esiste già una richiesta di chiarimento aperta. Aspetta che il cliente risponda.',
+    };
+  }
+
+  // Carica l'ultimo output del Direttore Operativo
+  const direttoreOutput = await prisma.agentOutput.findFirst({
+    where: { projectId, agente: 'direttore-operativo', status: 'success' },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (!direttoreOutput) {
+    return { ok: false, error: 'Esegui prima il Direttore Operativo.' };
+  }
+  const parsed = direttoreOutputSchema.safeParse(direttoreOutput.payload);
+  if (!parsed.success) {
+    return { ok: false, error: 'Output Direttore non valido. Ri-esegui.' };
+  }
+  const questions = parsed.data.missing_information;
+  if (questions.length === 0) {
+    return {
+      ok: false,
+      error: 'Il Direttore non ha individuato informazioni mancanti. Niente da chiedere al cliente.',
+    };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.clarificationRequest.create({
+      data: {
+        projectId,
+        briefId: brief.id,
+        questions: questions as unknown as Prisma.InputJsonValue,
+        status: 'pending',
+        runId: direttoreOutput.runId,
+      },
+    });
+    await tx.project.update({
+      where: { id: projectId },
+      data: { stato: 'attesa_chiarimenti' },
+    });
+    await tx.event.create({
+      data: {
+        projectId,
+        tipo: 'project.clarification_requested',
+        payload: { questionsCount: questions.length },
+      },
+    });
+  });
+
+  // Auto-trigger email cliente con le domande embedded nel body
+  await safelyTriggerEmail({
+    projectId,
+    kind: 'brief_clarification_needed',
+    clarificationQuestions: questions,
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+  return { ok: true, questionsCount: questions.length };
 }
 
 /**
@@ -1229,117 +1345,9 @@ export async function composeAndSendEmailAction(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   await requireAdmin();
 
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    include: {
-      client: true,
-    },
-  });
-  if (!project) return { ok: false, error: 'Progetto non trovato.' };
-
-  const invoice = await prisma.invoice.findFirst({
-    where: { projectId },
-    orderBy: { createdAt: 'desc' },
-  });
-  const completedRounds = await prisma.revisionRound.count({
-    where: { projectId, status: 'completata' },
-  });
-  const deliverableCount = await prisma.deliverable.count({ where: { projectId } });
-  const portalUrl = process.env.APP_CLIENT_URL ?? 'http://localhost:3001';
-
-  // Compone il body via agente
-  let composed: EmailComposerOutput;
-  let composerRunId: string | null = null;
-  try {
-    const runResult = await runAgent(
-      emailComposerAgent,
-      {
-        kind,
-        context: {
-          client_name: project.client.ragioneSociale,
-          project_title: project.titolo,
-          project_code: project.codiceProgetto,
-          invoice_number: invoice?.numero,
-          amount_cents: invoice?.importoCents,
-          currency: invoice?.valuta ?? 'EUR',
-          revision_round: completedRounds > 0 ? completedRounds : undefined,
-          deliverable_count: deliverableCount > 0 ? deliverableCount : undefined,
-          portal_url: `${portalUrl}/projects/${projectId}`,
-          custom_notes: customNotes,
-        },
-        language: project.language as 'it' | 'en',
-        tone: 'professionale',
-      },
-      { projectId: project.id },
-    );
-    composed = runResult.output as EmailComposerOutput;
-    composerRunId = runResult.runId;
-  } catch (e) {
-    return { ok: false, error: `Email Composer fallito: ${(e as Error).message}` };
-  }
-
-  const toAddress = project.client.emailFatturazione;
-  const fromAddress = process.env.MAIL_FROM_ADDRESS ?? 'agency@kansei-studio.art';
-
-  // Crea record EmailMessage in stato queued
-  const emailMessage = await prisma.emailMessage.create({
-    data: {
-      projectId,
-      kind,
-      toAddress,
-      fromAddress,
-      subject: composed.subject,
-      bodyHtml: composed.body_html,
-      bodyText: composed.body_text,
-      status: 'queued',
-      runId: composerRunId,
-    },
-  });
-
-  // Invia via mailer
-  const sendResult = await sendEmail({
-    to: toAddress,
-    subject: composed.subject,
-    html: composed.body_html,
-    text: composed.body_text,
-  });
-
-  if (sendResult.ok) {
-    await prisma.emailMessage.update({
-      where: { id: emailMessage.id },
-      data: {
-        status: 'sent',
-        smtpMessageId: sendResult.messageId,
-        sentAt: new Date(),
-      },
-    });
-    await prisma.event.create({
-      data: {
-        projectId,
-        tipo: 'email.sent',
-        payload: { kind, to: toAddress, mocked: sendResult.mocked },
-      },
-    });
-  } else {
-    await prisma.emailMessage.update({
-      where: { id: emailMessage.id },
-      data: {
-        status: 'failed',
-        errorMessage: sendResult.error,
-      },
-    });
-    await prisma.event.create({
-      data: {
-        projectId,
-        tipo: 'email.failed',
-        payload: { kind, to: toAddress, error: sendResult.error },
-      },
-    });
-    revalidatePath(`/projects/${projectId}`);
-    return { ok: false, error: `Invio fallito: ${sendResult.error}` };
-  }
-
+  const result = await sendProjectEmail({ projectId, kind, customNotes });
   revalidatePath(`/projects/${projectId}`);
+  if (!result.ok) return { ok: false, error: `Invio fallito: ${result.error}` };
   return { ok: true };
 }
 
@@ -1438,6 +1446,9 @@ export async function sendQuoteAction(
       },
     });
   });
+
+  // Auto-trigger email cliente: "preventivo pronto, dai un'occhiata"
+  await safelyTriggerEmail({ projectId, kind: 'quote_sent' });
 
   revalidatePath(`/projects/${projectId}`);
   revalidatePath('/projects');

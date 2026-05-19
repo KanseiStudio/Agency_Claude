@@ -7,6 +7,7 @@ import { RevisionForm } from './revision-form';
 import { PayButton } from './pay-button';
 import { isMockPayments } from '@/lib/stripe';
 import { ApproveAndProceedButton } from './approve-button';
+import { ClarificationForm } from './clarification-form';
 
 export default async function ClientProjectDetailPage({
   params,
@@ -58,6 +59,15 @@ export default async function ClientProjectDetailPage({
     where: { projectId: project.id },
     orderBy: { createdAt: 'asc' },
   });
+
+  // Richiesta chiarimenti pending (Direttore ha rilevato info mancanti)
+  const pendingClarification = await prisma.clarificationRequest.findFirst({
+    where: { projectId: project.id, status: 'pending' },
+    orderBy: { createdAt: 'desc' },
+  });
+  const pendingClarificationQuestions: string[] = pendingClarification
+    ? ((pendingClarification.questions as unknown as string[]) ?? [])
+    : [];
 
   // Round revisione del cliente
   const revisionRounds = await prisma.revisionRound.findMany({
@@ -124,6 +134,14 @@ export default async function ClientProjectDetailPage({
           È arrivato il preventivo. Leggilo qui sotto e accettalo per dare il via alla produzione,
           oppure rifiutalo per discuterne con l&apos;agenzia.
         </p>
+      ) : null}
+
+      {/* Richiesta chiarimenti dal Direttore Operativo */}
+      {pendingClarification && pendingClarificationQuestions.length > 0 ? (
+        <ClarificationForm
+          clarificationRequestId={pendingClarification.id}
+          questions={pendingClarificationQuestions}
+        />
       ) : null}
       {project.stato === 'preventivo_accettato' ? (
         <p className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">

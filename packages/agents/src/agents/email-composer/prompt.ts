@@ -88,6 +88,13 @@ export function buildUserMessage(input: EmailComposerInput): string {
   }
   if (c.portal_url) lines.push(`URL portale cliente: ${c.portal_url}`);
   if (c.custom_notes) lines.push('', `Note specifiche: ${c.custom_notes}`);
+  if (c.clarification_questions && c.clarification_questions.length > 0) {
+    lines.push(
+      '',
+      'Domande chiarimento:',
+      ...c.clarification_questions.map((q, i) => `${i + 1}. ${q}`),
+    );
+  }
   lines.push(
     '',
     `Scrivi l'email in JSON conforme allo schema (subject, body_text, body_html, preheader).`,

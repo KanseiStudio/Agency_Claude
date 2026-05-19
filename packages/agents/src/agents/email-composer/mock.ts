@@ -16,7 +16,18 @@ export function buildMockEmailComposerResponse(userMessage: string): string {
   const deliverableCount = matchLine(userMessage, /Deliverable pubblicati:\s*(\d+)/);
   const daysWaiting = matchLine(userMessage, /Giorni di attesa:\s*(\d+)/);
   const portalUrl = matchLine(userMessage, /URL portale cliente:\s*(\S+)/) ?? 'https://kansei-studio.art';
-  const customNotes = matchLine(userMessage, /Note specifiche:\s*([\s\S]+)$/);
+  const customNotes = matchLine(userMessage, /Note specifiche:\s*([\s\S]+?)(?:\n\n|$)/);
+  // Lista domande di chiarimento (una per riga, dopo "Domande chiarimento:")
+  const questionsBlock = matchLine(
+    userMessage,
+    /Domande chiarimento:\s*\n([\s\S]+?)(?:\n\n|$)/,
+  );
+  const clarificationQuestions = questionsBlock
+    ? questionsBlock
+        .split('\n')
+        .map((l) => l.replace(/^\s*[-*\d.)\s]+/, '').trim())
+        .filter((s) => s.length > 5)
+    : [];
 
   const template = TEMPLATES[kind] ?? TEMPLATES.custom;
   const out = template({
@@ -30,6 +41,7 @@ export function buildMockEmailComposerResponse(userMessage: string): string {
     daysWaiting: daysWaiting ?? undefined,
     portalUrl,
     customNotes: customNotes ?? undefined,
+    clarificationQuestions: clarificationQuestions.length > 0 ? clarificationQuestions : undefined,
   });
 
   return JSON.stringify(out);
@@ -46,6 +58,7 @@ interface TemplateVars {
   daysWaiting?: string;
   portalUrl: string;
   customNotes?: string;
+  clarificationQuestions?: string[];
 }
 
 const SIGNATURE_TEXT = '— Lo staff di Kansei-Studio Agency';
@@ -233,6 +246,55 @@ ${SIGNATURE_TEXT}`,
       `il progetto <strong>"${v.project}"</strong> è ufficialmente chiuso. Tutti i file sono nel portale e restano lì a tua disposizione.`,
       `È stato un piacere collaborare con te. Se in futuro hai altri progetti — o anche solo un'idea da raccontare — sappi che siamo sempre qui.`,
       `A risentirci presto!`,
+    ]) + SIGNATURE_HTML,
+  }),
+
+  brief_clarification_needed: (v) => {
+    const qs = v.clarificationQuestions ?? [];
+    const qListText = qs.length > 0
+      ? qs.map((q, i) => `${i + 1}. ${q}`).join('\n')
+      : 'Trovi le domande sul portale.';
+    const qListHtml = qs.length > 0
+      ? `<ol>${qs.map((q) => `<li>${q}</li>`).join('')}</ol>`
+      : '<p>Trovi le domande sul portale.</p>';
+    return {
+      subject: `Servono alcune info per partire con "${v.project}"`,
+      preheader: `Bastano poche risposte per sbloccare il preventivo.`,
+      body_text: `Ciao ${v.clientName},
+
+per preparare al meglio il preventivo del progetto "${v.project}" ci servono ancora alcune informazioni che non abbiamo trovato nel brief.
+
+${qListText}
+
+Puoi rispondere comodamente dal portale cliente: ${v.portalUrl}
+
+Appena riceviamo le risposte facciamo partire la lavorazione. Senza fretta, ma queste info ci aiuteranno a darti un preventivo più preciso.
+
+${SIGNATURE_TEXT}`,
+      body_html: wrapHtml([
+        `Ciao <strong>${v.clientName}</strong>,`,
+        `per preparare al meglio il preventivo del progetto <strong>"${v.project}"</strong> ci servono ancora alcune informazioni che non abbiamo trovato nel brief.`,
+      ]) + qListHtml + wrapHtml([
+        `Puoi rispondere comodamente dal <a href="${v.portalUrl}">portale cliente</a>.`,
+        `Appena riceviamo le risposte facciamo partire la lavorazione. Senza fretta, ma queste info ci aiuteranno a darti un preventivo più preciso.`,
+      ]) + SIGNATURE_HTML,
+    };
+  },
+
+  brief_clarification_responded: (v) => ({
+    subject: `Risposte ricevute · ${v.project}`,
+    preheader: `Il cliente ha completato il brief, si può procedere.`,
+    body_text: `Aggiornamento progetto "${v.project}" (${v.projectCode}).
+
+${v.clientName} ha appena risposto alle domande di chiarimento sul brief. Trovi tutto nel pannello admin del progetto: ${v.portalUrl}
+
+Ora puoi ri-eseguire il Direttore Operativo e procedere con il preventivo.
+
+${SIGNATURE_TEXT}`,
+    body_html: wrapHtml([
+      `Aggiornamento progetto <strong>"${v.project}"</strong> (${v.projectCode}).`,
+      `<strong>${v.clientName}</strong> ha appena risposto alle domande di chiarimento sul brief. Trovi tutto nel <a href="${v.portalUrl}">pannello admin</a>.`,
+      `Ora puoi ri-eseguire il Direttore Operativo e procedere con il preventivo.`,
     ]) + SIGNATURE_HTML,
   }),
 

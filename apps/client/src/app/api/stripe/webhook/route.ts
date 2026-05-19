@@ -26,6 +26,7 @@ import { NextResponse } from 'next/server';
 import type Stripe from 'stripe';
 import { prisma } from '@kansei/database';
 import { verifyWebhookSignature } from '@/lib/stripe';
+import { safelyTriggerEmail } from '@/lib/notifications';
 
 export async function POST(req: Request): Promise<NextResponse> {
   const signature = req.headers.get('stripe-signature');
@@ -129,6 +130,13 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promis
         },
       },
     });
+  });
+
+  // Auto-trigger email cliente: "pagamento ricevuto, grazie + download sbloccati"
+  // FUORI dalla transazione: l'email non deve bloccare la conferma del pagamento.
+  await safelyTriggerEmail({
+    projectId: payment.invoice.projectId,
+    kind: 'payment_confirmed',
   });
 }
 

@@ -83,6 +83,7 @@ enum ProjectStatus {
   bozza
   in_attesa_approvazione_admin
   in_analisi
+  attesa_chiarimenti
   preventivo_inviato
   preventivo_accettato
   in_produzione
@@ -122,6 +123,7 @@ model Project {
   deliverables            Deliverable[]
   invoices                Invoice[]
   emailMessages           EmailMessage[]
+  clarificationRequests   ClarificationRequest[]
   approvals               Approval[]
   blocks                  ClientBlock[]
   events                  Event[]
@@ -139,20 +141,55 @@ model Project {
 }
 
 model Brief {
-  id                    String    @id @default(cuid())
-  projectId             String    @map("project_id")
-  project               Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  descrizione           String    @db.Text
-  obiettivi             Json?     @map("obiettivi_json")
-  deliverableRichiesti  Json?     @map("deliverable_richiesti_json")
+  id                    String                 @id @default(cuid())
+  projectId             String                 @map("project_id")
+  project               Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  descrizione           String                 @db.Text
+  obiettivi             Json?                  @map("obiettivi_json")
+  deliverableRichiesti  Json?                  @map("deliverable_richiesti_json")
   deadline              DateTime?
-  budgetIndicativoCents Int?      @map("budget_indicativo_cents")
-  filesMeta             Json?     @map("files_json")
-  createdAt             DateTime  @default(now()) @map("created_at")
-  updatedAt             DateTime  @updatedAt @map("updated_at")
+  budgetIndicativoCents Int?                   @map("budget_indicativo_cents")
+  filesMeta             Json?                  @map("files_json")
+  clarificationRequests ClarificationRequest[]
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
 
   @@index([projectId])
   @@map("briefs")
+}
+
+// ============================================================================
+//   CHIARIMENTI BRIEF (Direttore Operativo individua info mancanti → cliente)
+// ============================================================================
+
+enum ClarificationStatus {
+  pending
+  responded
+  cancelled
+}
+
+model ClarificationRequest {
+  id           String              @id @default(cuid())
+  projectId    String              @map("project_id")
+  project      Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  briefId      String              @map("brief_id")
+  brief        Brief               @relation(fields: [briefId], references: [id])
+  /// Array di domande (string[]) generate dal Direttore Operativo dal campo
+  /// missing_information del suo output.
+  questions    Json
+  /// Array di risposte parallelo a questions (string[]), popolato quando
+  /// il cliente risponde. NULL finché status='pending'.
+  responses    Json?
+  status       ClarificationStatus @default(pending)
+  /// Run ID del Direttore che ha generato le domande (audit).
+  runId        String?             @map("run_id")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  respondedAt  DateTime?           @map("responded_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+
+  @@index([projectId])
+  @@index([status])
+  @@map("clarification_requests")
 }
 
 enum ProjectFileKind {
@@ -774,6 +811,8 @@ enum EmailKind {
   payment_confirmed
   payment_reminder
   project_completed
+  brief_clarification_needed
+  brief_clarification_responded
   custom
 }
 

@@ -14,6 +14,8 @@ export const emailKindSchema = z.enum([
   'payment_confirmed',
   'payment_reminder',
   'project_completed',
+  'brief_clarification_needed',
+  'brief_clarification_responded',
   'custom',
 ]);
 
@@ -46,6 +48,11 @@ export const emailContextSchema = z.object({
   days_waiting: z.number().int().nonnegative().optional(),
   /** Note specifiche da includere (per kind=custom o context specifico). */
   custom_notes: z.string().optional(),
+  /**
+   * Lista domande per kind=brief_clarification_needed. Verranno embed nel body
+   * come elenco numerato.
+   */
+  clarification_questions: z.array(z.string()).optional(),
 });
 
 export type EmailContext = z.infer<typeof emailContextSchema>;

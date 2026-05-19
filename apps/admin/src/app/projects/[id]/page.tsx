@@ -30,6 +30,7 @@ import { MarkRoundCompletedButton } from './revision-round-button';
 import { CreateInvoiceButton } from './invoice-button';
 import { ProjectManagerButton } from './project-manager-button';
 import { ComposeEmailButton } from './email-button';
+import { SendClarificationButton } from './clarification-button';
 
 // Schema PM output per parsing del payload salvato
 const pmOutputSchema = z.object({
@@ -129,6 +130,12 @@ export default async function AdminProjectDetailPage({
   });
   const pmParsed = pmOutputRaw ? pmOutputSchema.safeParse(pmOutputRaw.payload) : null;
   const pmOutput = pmParsed && pmParsed.success ? pmParsed.data : null;
+
+  // Ultima richiesta chiarimenti (per mostrare lo stato sotto il Direttore)
+  const lastClarification = await prisma.clarificationRequest.findFirst({
+    where: { projectId: project.id },
+    orderBy: { createdAt: 'desc' },
+  });
 
   // Output del Direttore Operativo (se già eseguito)
   const direttoreOutputRaw = await prisma.agentOutput.findFirst({
@@ -522,15 +529,66 @@ export default async function AdminProjectDetailPage({
               ) : null}
 
               {direttoreOutput.missing_information.length > 0 ? (
-                <div>
+                <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950/40">
                   <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
-                    Informazioni mancanti dal brief
+                    Informazioni mancanti dal brief ({direttoreOutput.missing_information.length})
                   </h3>
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-900 dark:text-amber-100">
                     {direttoreOutput.missing_information.map((m, i) => (
                       <li key={i}>{m}</li>
                     ))}
                   </ul>
+
+                  {/* Stato chiarimento */}
+                  <div className="mt-4 border-t border-amber-300 pt-3 dark:border-amber-700">
+                    {lastClarification && lastClarification.status === 'pending' ? (
+                      <p className="rounded-lg bg-white px-3 py-2 text-xs text-amber-900 dark:bg-zinc-950 dark:text-amber-200">
+                        ⏳ Domande inviate al cliente il{' '}
+                        {lastClarification.createdAt.toLocaleString('it-IT')}. In attesa
+                        di risposta. Il preventivo è bloccato finché il cliente non
+                        risponde.
+                      </p>
+                    ) : lastClarification && lastClarification.status === 'responded' ? (
+                      <div className="space-y-2">
+                        <p className="rounded-lg bg-emerald-100 px-3 py-2 text-xs text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
+                          ✓ Cliente ha risposto il{' '}
+                          {lastClarification.respondedAt?.toLocaleString('it-IT')}. Le
+                          risposte sono state appese al brief. Ri-esegui il Direttore
+                          Operativo per aggiornare l&apos;analisi.
+                        </p>
+                        <details>
+                          <summary className="cursor-pointer text-[10px] font-semibold uppercase text-amber-700 dark:text-amber-300">
+                            Vedi domande e risposte
+                          </summary>
+                          <ol className="mt-2 space-y-2">
+                            {(lastClarification.questions as unknown as string[]).map(
+                              (q, i) => {
+                                const responses =
+                                  (lastClarification.responses as unknown as
+                                    | string[]
+                                    | null) ?? [];
+                                return (
+                                  <li
+                                    key={i}
+                                    className="rounded-lg bg-white p-2 text-xs dark:bg-zinc-950"
+                                  >
+                                    <p className="font-semibold text-zinc-900 dark:text-zinc-50">
+                                      Q{i + 1}. {q}
+                                    </p>
+                                    <p className="mt-1 italic text-zinc-700 dark:text-zinc-300">
+                                      R. {responses[i] || '(vuota)'}
+                                    </p>
+                                  </li>
+                                );
+                              },
+                            )}
+                          </ol>
+                        </details>
+                      </div>
+                    ) : (
+                      <SendClarificationButton projectId={project.id} />
+                    )}
+                  </div>
                 </div>
               ) : null}
 
